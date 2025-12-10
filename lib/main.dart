@@ -10,12 +10,10 @@ import 'views/auth/login_view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(); // Firebase'i başlat
+  await Firebase.initializeApp();
+
   runApp(
-    ChangeNotifierProvider( // AuthViewModel'i tüm uygulamaya sağlar
-      create: (context) => AuthViewModel(),
-      child: const MyApp(),
-    ),
+    const MyApp(), // Provider’ı burada değil, MyApp içinde kullanacağız
   );
 }
 
@@ -24,30 +22,24 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Uygulama her açıldığında Auth durumunu kontrol eden bir tüketici (Consumer)
-    return Consumer<AuthViewModel>(
-      builder: (context, authViewModel, child) {
-        // Eğer kullanıcı zaten giriş yapmışsa (veya giriş başarılıysa)
-        if (authViewModel.currentUser != null) {
-          // Kullanıcı modelindeki role bakarak yönlendirme yaparız
+    return ChangeNotifierProvider(
+      create: (_) => AuthViewModel(),
+      child: Consumer<AuthViewModel>(
+        builder: (context, authViewModel, _) {
+           print("🔄 [main.dart] rebuild edildi - currentUser: ${authViewModel.currentUser?.email}");
           return MaterialApp(
             title: 'Akıllı Kampüs',
-            home: authViewModel.currentUser!.role == 'admin'
-                ?  AdminHomeView() // Admin sayfasına yönlendir
-                :  HomeView(), // Normal kullanıcı sayfasına yönlendir
+            home: authViewModel.currentUser != null
+                ? (authViewModel.currentUser!.role == 'admin'
+                    ? const AdminHomeView()
+                    : const HomeView())
+                : const LoginView(),
           );
-        }
-
-        // Eğer giriş yapılmamışsa, Login ekranını göster
-        return const MaterialApp(
-          title: 'Akıllı Kampüs',
-          home: LoginView(),
-        );
-      },
+        },
+      ),
     );
   }
 }
-
 
 // ... (mevcut kodlar) ...
 
@@ -56,20 +48,78 @@ class AdminHomeView extends StatelessWidget {
   const AdminHomeView({super.key});
   @override
   Widget build(BuildContext context) {
+    final authViewModel = Provider.of<AuthViewModel>(context, listen: false); 
+    
     return Scaffold(
-      appBar: AppBar(title: const Text('Admin Paneli')),
-      body: const Center(child: Text('Admin Girişi Başarılı')),
+      appBar: AppBar(title: const Text('Kullanıcı Ana Sayfası')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Kullanıcı Girişi Başarılı'),
+            const SizedBox(height: 20),
+            
+            // 🚨 Çıkış Yap Butonu
+           ElevatedButton(
+  onPressed: () async {
+    await authViewModel.signOut();
+
+    if (context.mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginView()),
+        (route) => false, // 🔹 Önceki tüm sayfaları siler
+      );
+    }
+  },
+  child: const Text('Çıkış Yap'),
+),
+
+          ],
+        ),
+      ),
     );
   }
 }
 
+
+// ...
 class HomeView extends StatelessWidget {
   const HomeView({super.key});
   @override
   Widget build(BuildContext context) {
+    // AuthViewModel'e erişim
+    final authViewModel = Provider.of<AuthViewModel>(context, listen: false); 
+
     return Scaffold(
       appBar: AppBar(title: const Text('Kullanıcı Ana Sayfası')),
-      body: const Center(child: Text('Kullanıcı Girişi Başarılı')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Kullanıcı Girişi Başarılı'),
+            const SizedBox(height: 20),
+            
+            // 🚨 Çıkış Yap Butonu
+            ElevatedButton(
+  onPressed: () async {
+    await authViewModel.signOut();
+
+    if (context.mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginView()),
+        (route) => false, // 🔹 Önceki tüm sayfaları siler
+      );
+    }
+  },
+  child: const Text('Çıkış Yap'),
+),
+
+          ],
+        ),
+      ),
     );
   }
 }
+// ... (AdminHomeView'a da aynı butonu ekleyebilirsiniz)
