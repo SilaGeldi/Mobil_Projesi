@@ -32,15 +32,14 @@ class AuthService {
         return newUser;
       }
     } on FirebaseAuthException {
-      rethrow; // Hata yönetimi (örneğin 'email-already-in-use')
+      rethrow;
     }
     return null;
   }
 
-  // Kullanıcı Girişi (Login)
+// Kullanıcı Girişi (Login) - GÜNCELLENDİ
   Future<UserModel?> signIn({required String email, required String password}) async {
     try {
-      // 1. Auth: Kullanıcının kimliğini doğrula
       UserCredential userCredential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
@@ -48,31 +47,52 @@ class AuthService {
       User? user = userCredential.user;
 
       if (user != null) {
-        // 2. Firestore: Rol bilgisini çek
         DocumentSnapshot doc = await _firestore.collection(_userCollection).doc(user.uid).get();
+
+        // 🔹 Eğer belge henüz oluşmamışsa, kısa bir süre bekleyip tekrar dene
+        if (!doc.exists) {
+          await Future.delayed(const Duration(milliseconds: 700));
+          doc = await _firestore.collection(_userCollection).doc(user.uid).get();
+        }
 
         if (doc.exists) {
           return UserModel.fromMap(doc.data() as Map<String, dynamic>);
+        } else {
+          throw Exception('Kullanıcı rol bilgisi Firestoreda bulunamadı.');
         }
       }
     } on FirebaseAuthException {
-      rethrow; // Hata yönetimi (örneğin 'wrong-password')
+      rethrow;
+    } catch (e) {
+      rethrow;
     }
     return null;
   }
-  
-  // Çıkış Yap
+
+// Çıkış Yap
   Future<void> signOut() async {
     await _auth.signOut();
   }
-  
-  // Şifre Sıfırlama (Simülasyon/Gerçek Uygulama)
+
+// Şifre Sıfırlama (Simülasyon/Gerçek Uygulama)
   Future<void> resetPassword({required String email}) async {
-    // Proje gereksinimi şifre sıfırlama bağlantısının gönderildiğini "simüle" etmektir.
-    // Eğer gerçekten göndermek isterseniz:
-    // await _auth.sendPasswordResetEmail(email: email);
-    
-    // Simülasyon için hata fırlatmayız, sadece başarılı sayarız.
-    await Future.delayed(Duration(milliseconds: 500)); 
+// Simülasyon için hata fırlatmayız, sadece başarılı sayarız.
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+
+  User? getCurrentUser() {
+    return _auth.currentUser;
+  }
+
+// UID'den UserModel'i çeker (Sign-in ile aynı mantık)
+  Future<UserModel?> getUserModelFromFirestore(String uid) async {
+    DocumentSnapshot doc = await _firestore.collection(_userCollection).doc(uid).get();
+
+    if (doc.exists) {
+      return UserModel.fromMap(doc.data() as Map<String, dynamic>);
+    } else {
+      // Firestore belgesi eksikse, hata fırlatılır.
+      throw Exception('Kullanıcı rol bilgisi Firestoreda bulunamadı (Oturum kontrolü).');
+    }
   }
 }
