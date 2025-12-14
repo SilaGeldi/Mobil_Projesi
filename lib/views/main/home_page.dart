@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../../view_models/notification_view_model.dart';
+import '../../view_models/auth_view_model.dart';
 import '../../models/notification_model.dart';
 import 'add_new_notif_page.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -11,56 +13,55 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final notifVM = Provider.of<NotificationViewModel>(context);
+    final authVM = Provider.of<AuthViewModel>(context);
+    final userName = authVM.currentUser?.name ?? "Kullanıcı";
 
     return Scaffold(
       backgroundColor: Colors.white,
+
+      // 🔝 APP BAR
       appBar: AppBar(
-        elevation: 0,
         backgroundColor: Colors.white,
+        elevation: 0,
         automaticallyImplyLeading: false,
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Sol üst: kullanıcı adı
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
+              children: [
+                const Text(
                   "Hoşgeldin,",
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
-                  ),
+                  style: TextStyle(fontSize: 14, color: Colors.grey),
                 ),
                 Text(
-                  "Sıla Geldi", // TODO: Firebase Auth'tan çekilecek
-                  style: TextStyle(
+                  userName,
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
+                    color: Colors.black,
                   ),
                 ),
               ],
             ),
-
-            // Sağ üst: Ayarlar butonu
             IconButton(
+              icon: const Icon(Icons.settings, color: Colors.black),
               onPressed: () {
-                print("Ayarlar butonuna basıldı");
+                debugPrint("Ayarlar tıklandı");
               },
-              icon: const Icon(Icons.settings, size: 28, color: Colors.black),
-            ),
+            )
           ],
         ),
       ),
 
-      // İçerik
+      // 📦 BODY
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Column(
           children: [
             const SizedBox(height: 10),
 
-            // 🔍 Arama Barı + Filtre Butonu
+            // 🔍 ARAMA + FİLTRE
             Row(
               children: [
                 Expanded(
@@ -91,12 +92,12 @@ class HomePage extends StatelessWidget {
 
             const SizedBox(height: 16),
 
-            // 📢 Bildirim Listesi
+            // 📢 BİLDİRİM LİSTESİ
             Expanded(
               child: notifVM.notifications.isEmpty
                   ? const Center(
                 child: Text(
-                  "Hiç bildirim bulunmuyor...",
+                  "Henüz bildirim yok",
                   style: TextStyle(color: Colors.grey),
                 ),
               )
@@ -112,28 +113,26 @@ class HomePage extends StatelessWidget {
         ),
       ),
 
-      // Sağ alttaki Yeni Bildirim + Buton
+      // ➕ YENİ BİLDİRİM
       floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.black,
+        child: const Icon(Icons.add),
         onPressed: () {
           Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const AddNewNotificationPage(),
-              ));
+            context,
+            MaterialPageRoute(
+              builder: (_) => const AddNewNotificationPage(),
+            ),
+          );
         },
-        backgroundColor: Colors.black,
-        child: const Icon(Icons.add, size: 30),
       ),
 
-      // 🔽 Alt Bar
+      // 🔽 ALT BAR
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 1, // orta buton = home
+        currentIndex: 1,
         onTap: (index) {
-          if (index == 0) {
-            print("Harita sayfasına gidiliyor...");
-          } else if (index == 2) {
-            print("Profil sayfasına gidiliyor...");
-          }
+          if (index == 0) debugPrint("Harita");
+          if (index == 2) debugPrint("Profil");
         },
         items: const [
           BottomNavigationBarItem(
@@ -142,7 +141,7 @@ class HomePage extends StatelessWidget {
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.home),
-            label: "Anasayfa",
+            label: "Ana Sayfa",
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person),
@@ -153,7 +152,7 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  // 🔔 Bildirim Kartı Tasarımı
+  // 🔔 BİLDİRİM KARTI
   Widget _buildNotificationCard(NotificationModel notif) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -163,81 +162,94 @@ class HomePage extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey.shade300),
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // sol icon
-          Icon(
-            Icons.notifications,
-            size: 32,
-            color: Colors.black87,
-          ),
-          const SizedBox(width: 12),
-
-          // sağ içerik alanı
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+          // ÜST SATIR: BAŞLIK + TARİH
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
                   notif.title,
                   style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                      fontWeight: FontWeight.bold, fontSize: 16),
                 ),
+              ),
+              Text(
+                _formatDate(notif.date),
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
 
-                const SizedBox(height: 4),
+          const SizedBox(height: 6),
 
-                Text(
-                  notif.description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+          // AÇIKLAMA
+          Text(
+            notif.description,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+
+          const SizedBox(height: 10),
+
+          // ALT SATIR: DURUM + TÜR
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // DURUM
+              Container(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _statusColor(notif.status),
+                  borderRadius: BorderRadius.circular(8),
                 ),
+                child: Text(
+                  notif.status,
+                  style:
+                  const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
 
-                const SizedBox(height: 6),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // tip
-                    Container(
-                      padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.black,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        notif.type,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-
-                    // tarih
-                    Text(
-                      _formatDate(notif.date),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ],
-                )
-              ],
-            ),
-          )
+              // TÜR
+              Container(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  notif.type,
+                  style:
+                  const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  // 📅 Tarih Formatlama
+  Color _statusColor(String status) {
+    switch (status) {
+      case "aktif":
+        return Colors.green;
+      case "pasif":
+        return Colors.grey;
+      case "inceleniyor":
+        return Colors.orange;
+      default:
+        return Colors.blueGrey;
+    }
+  }
+
+
   String _formatDate(Timestamp ts) {
-    final date = ts.toDate();
-    return "${date.day}.${date.month}.${date.year}";
+    final d = ts.toDate();
+    return "${d.day}.${d.month}.${d.year}";
   }
 }

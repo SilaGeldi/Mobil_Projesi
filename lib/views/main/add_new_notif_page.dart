@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:geolocator/geolocator.dart';
-import '../../models/notification_model.dart';
-import '../../view_models/notification_view_model.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../../view_models/notification_view_model.dart';
+import '../../view_models/auth_view_model.dart';
+import '../../models/notification_model.dart';
 
 class AddNewNotificationPage extends StatefulWidget {
   const AddNewNotificationPage({super.key});
@@ -14,189 +17,217 @@ class AddNewNotificationPage extends StatefulWidget {
 }
 
 class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
-  // Controllers
-  final TextEditingController titleController = TextEditingController();
-  final TextEditingController descriptionController = TextEditingController();
+  final titleController = TextEditingController();
+  final descController = TextEditingController();
 
   String selectedType = "duyuru";
-  String selectedStatus = "aktif";
+  final String defaultStatus = "inceleniyor";
 
+  // 📍 KONUM
   GeoPoint? selectedLocation;
-  bool isLoadingLocation = false;
+  bool loadingLocation = false;
+  bool locationFromDevice = false;
 
-  Future<void> getCurrentLocation() async {
-    setState(() => isLoadingLocation = true);
+  // 🏫 Kampüs başlangıç konumu
+// 🏫 Atatürk Üniversitesi Kampüs Konumu
+  static const LatLng campusLocation =
+  LatLng(39.9009, 41.2640);
 
-    LocationPermission permission = await Geolocator.requestPermission();
+  late LatLng mapCenter = campusLocation;
 
+  // 📱 Cihaz konumu al
+  Future<void> useDeviceLocation() async {
+    setState(() => loadingLocation = true);
+
+    final permission = await Geolocator.requestPermission();
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Konum izni gerekli.")),
-      );
-      setState(() => isLoadingLocation = false);
+      setState(() => loadingLocation = false);
       return;
     }
 
-    Position pos = await Geolocator.getCurrentPosition();
+    final pos = await Geolocator.getCurrentPosition();
 
     setState(() {
+      mapCenter = LatLng(pos.latitude, pos.longitude);
       selectedLocation = GeoPoint(pos.latitude, pos.longitude);
-      isLoadingLocation = false;
+      locationFromDevice = true;
+      loadingLocation = false;
     });
   }
 
   Future<void> saveNotification() async {
     if (titleController.text.isEmpty ||
-        descriptionController.text.isEmpty ||
+        descController.text.isEmpty ||
         selectedLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Lütfen tüm alanları doldurun.")),
+        const SnackBar(content: Text("Tüm alanları doldurun")),
       );
       return;
     }
 
+    final user = context.read<AuthViewModel>().currentUser!;
+
     final notif = NotificationModel(
-      notifId: null,
       title: titleController.text.trim(),
-      description: descriptionController.text.trim(),
+      description: descController.text.trim(),
       type: selectedType,
-      status: selectedStatus,
+      status: defaultStatus,
       location: selectedLocation!,
       date: Timestamp.now(),
+      createdBy: user.uid,
+      createdByName: user.name,
     );
 
-    await Provider.of<NotificationViewModel>(context, listen: false)
+    await context
+        .read<NotificationViewModel>()
         .addNotification(notif);
 
     Navigator.pop(context);
   }
 
+  // 🔲 Ortak Form Kartı
+  Widget formCard({required Widget child}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Yeni Bildirim Ekle"),
-        backgroundColor: Colors.black,
-      ),
+      appBar: AppBar(title: const Text("Yeni Bildirim")),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Başlık
-            TextField(
-              controller: titleController,
-              decoration: InputDecoration(
-                labelText: "Başlık",
-                filled: true,
-                fillColor: Colors.grey.shade200,
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Açıklama
-            TextField(
-              controller: descriptionController,
-              minLines: 4,
-              maxLines: 6,
-              decoration: InputDecoration(
-                labelText: "Açıklama",
-                alignLabelWithHint: true,
-                filled: true,
-                fillColor: Colors.grey.shade200,
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Tür Dropdown
-            DropdownButtonFormField<String>(
-              value: selectedType,
-              items: const [
-                DropdownMenuItem(value: "duyuru", child: Text("Duyuru")),
-                DropdownMenuItem(value: "acil", child: Text("Acil")),
-                DropdownMenuItem(
-                    value: "guvenlik", child: Text("Güvenlik")),
-                DropdownMenuItem(value: "bilgi", child: Text("Bilgi")),
-              ],
-              onChanged: (v) => setState(() => selectedType = v!),
-              decoration: InputDecoration(
-                labelText: "Tür",
-                filled: true,
-                fillColor: Colors.grey.shade200,
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Durum Dropdown
-            DropdownButtonFormField<String>(
-              value: selectedStatus,
-              items: const [
-                DropdownMenuItem(value: "aktif", child: Text("Aktif")),
-                DropdownMenuItem(value: "pasif", child: Text("Pasif")),
-                DropdownMenuItem(value: "cozuldu", child: Text("Çözüldü")),
-              ],
-              onChanged: (v) => setState(() => selectedStatus = v!),
-              decoration: InputDecoration(
-                labelText: "Durum",
-                filled: true,
-                fillColor: Colors.grey.shade200,
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Konum Alma Butonu
-            ElevatedButton.icon(
-              onPressed: isLoadingLocation ? null : getCurrentLocation,
-              icon: const Icon(Icons.location_on),
-              label: Text(
-                isLoadingLocation
-                    ? "Konum alınıyor..."
-                    : "Cihaz Konumunu Al",
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+            // 🧾 BAŞLIK
+            formCard(
+              child: TextField(
+                controller: titleController,
+                decoration: const InputDecoration(
+                  labelText: "Bildirim Başlığı",
+                  border: InputBorder.none,
+                ),
               ),
             ),
 
-            const SizedBox(height: 8),
-
-            // Konum gösterimi
-            if (selectedLocation != null)
-              Text(
-                "Konum: ${selectedLocation!.latitude}, ${selectedLocation!.longitude}",
-                style: const TextStyle(fontWeight: FontWeight.bold),
+            // 📝 AÇIKLAMA
+            formCard(
+              child: TextField(
+                controller: descController,
+                minLines: 4,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  labelText: "Açıklama",
+                  border: InputBorder.none,
+                ),
               ),
+            ),
 
-            const SizedBox(height: 30),
+            // 🏷️ TÜR
+            formCard(
+              child: DropdownButtonFormField(
+                value: selectedType,
+                decoration: const InputDecoration(
+                  labelText: "Bildirim Türü",
+                  border: InputBorder.none,
+                ),
+                items: const [
+                  DropdownMenuItem(
+                      value: "duyuru", child: Text("Duyuru")),
+                  DropdownMenuItem(
+                      value: "acil", child: Text("Acil")),
+                  DropdownMenuItem(
+                      value: "saglik", child: Text("Sağlık")),
+                  DropdownMenuItem(
+                      value: "kayip", child: Text("Kayıp")),
+                  DropdownMenuItem(
+                      value: "guvenlik",
+                      child: Text("Güvenlik")),
+                  DropdownMenuItem(
+                      value: "diger",
+                      child: Text("Diğer")),
+                ],
+                onChanged: (v) =>
+                    setState(() => selectedType = v!),
+              ),
+            ),
 
-            // Kaydet Butonu
+            // 📍 KONUM
+            formCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed:
+                    loadingLocation ? null : useDeviceLocation,
+                    icon: const Icon(Icons.my_location),
+                    label: Text(
+                      loadingLocation
+                          ? "Konum alınıyor..."
+                          : locationFromDevice
+                          ? "Cihaz konumu alındı ✓"
+                          : "Cihaz konumunu kullan",
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 🗺️ HARİTA
+                  SizedBox(
+                    height: 220,
+                    child: GoogleMap(
+                      initialCameraPosition:
+                      CameraPosition(
+                        target: mapCenter,
+                        zoom: 16,
+                      ),
+                      myLocationEnabled: true,
+                      myLocationButtonEnabled: false,
+                      onCameraMove: (pos) {
+                        mapCenter = pos.target;
+                      },
+                      onCameraIdle: () {
+                        setState(() {
+                          selectedLocation = GeoPoint(
+                            mapCenter.latitude,
+                            mapCenter.longitude,
+                          );
+                        });
+                      },
+                      markers: {
+                        Marker(
+                          markerId:
+                          const MarkerId("selected"),
+                          position: mapCenter,
+                        ),
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // 💾 KAYDET
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: saveNotification,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
                 child: const Text(
-                  "Kaydet",
-                  style: TextStyle(fontSize: 18),
+                  "Bildirim Oluştur",
+                  style: TextStyle(fontSize: 16),
                 ),
               ),
-            )
+            ),
           ],
         ),
       ),

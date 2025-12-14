@@ -1,37 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/notification_model.dart';
-import '../services/notification_service.dart';
 
 class NotificationViewModel extends ChangeNotifier {
-  final NotificationService _service = NotificationService();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   List<NotificationModel> notifications = [];
 
-  // Firestore dinleme
-  void listenNotifications() {
-    _service.getNotifications().listen((data) {
-      notifications = data;
-      notifyListeners();
-    });
+  NotificationViewModel() {
+    fetchNotifications();
   }
 
-  // Bildirim ekleme
-  Future<void> addNotification(NotificationModel model) async {
-    await _service.addNotification(model);
+  Future<void> fetchNotifications() async {
+    final snapshot = await _firestore
+        .collection('notifications')
+        .orderBy('date', descending: true)
+        .get();
+
+    notifications = snapshot.docs
+        .map((doc) =>
+        NotificationModel.fromMap(doc.data(), doc.id))
+        .toList();
+
+    notifyListeners();
   }
 
-  // Tek bildirim alma
-  Future<NotificationModel?> getNotification(String docId) async {
-    return await _service.getNotification(docId);
-  }
+  Future<void> addNotification(NotificationModel notification) async {
+    await _firestore
+        .collection('notifications')
+        .add(notification.toMap());
 
-  // Güncelleme
-  Future<void> updateNotification(String docId, Map<String, dynamic> data) async {
-    await _service.updateNotification(docId, data);
-  }
-
-  // Silme
-  Future<void> deleteNotification(String docId) async {
-    await _service.deleteNotification(docId);
+    // 🔥 ekledikten sonra listeyi yenile
+    await fetchNotifications();
   }
 }

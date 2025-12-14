@@ -8,6 +8,8 @@ class NotificationModel {
   String status;
   GeoPoint location;
   Timestamp date;
+  String createdBy;
+  String createdByName;
 
   NotificationModel({
     this.notifId,
@@ -17,6 +19,8 @@ class NotificationModel {
     required this.status,
     required this.location,
     required this.date,
+    required this.createdBy,
+    required this.createdByName,
   });
 
   // Firestore -> Model
@@ -30,6 +34,9 @@ class NotificationModel {
       status: map['status'] ?? '',
       location: map['location'] ?? const GeoPoint(0.0, 0.0),
       date: map['date'] ?? Timestamp.now(),
+      createdBy: map['createdBy'] ?? '',
+      createdByName: map['createdByName'] ?? '',
+
     );
   }
 
@@ -42,6 +49,9 @@ class NotificationModel {
       "status": status,
       "location": location,
       "date": date,
+      "createdBy": createdBy,
+      "createdByName": createdByName,
+
     };
   }
 }
