@@ -6,6 +6,7 @@ class UserModel {
   final String name;
   final String unit;
   final String role; // 'user' veya 'admin'
+  final Map<String, bool> preferences;
 
   UserModel({
     required this.uid,
@@ -13,18 +14,25 @@ class UserModel {
     required this.name,
     required this.unit,
     required this.role,
+    required this.preferences,
   });
 
   // Firestore'dan veri okumak için
-  factory UserModel.fromMap(Map<String, dynamic> data) {
-    return UserModel(
-      uid: data['uid'] ?? '',
-      email: data['email'] ?? '',
-      name: data['name'] ?? '',
-      unit: data['unit'] ?? '',
-      role: data['role'] ?? 'user',
-    );
-  }
+factory UserModel.fromMap(Map<String, dynamic> map, String id) {
+  return UserModel(
+    uid: id,
+    name: map['name'] ?? '',
+    email: map['email'] ?? '',
+    role: map['role'] ?? 'user',
+    unit: map['unit'] ?? '',
+    // map['preferences'] kullanarak hata veren kısmı düzeltiyoruz
+    preferences: Map<String, bool>.from(map['preferences'] ?? {
+      'health': true,
+      'technical': true,
+    }),
+  );
+}
+  
 
   // Firestore'a veri yazmak için
   Map<String, dynamic> toMap() {
@@ -33,6 +41,7 @@ class UserModel {
       'email': email,
       'name': name,
       'unit': unit,
+      'preferences': preferences,
       'role': role,
       'createdAt': DateTime.now().toUtc(),
     };

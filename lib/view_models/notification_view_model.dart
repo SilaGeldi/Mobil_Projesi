@@ -33,4 +33,36 @@ class NotificationViewModel extends ChangeNotifier {
     // 🔥 ekledikten sonra listeyi yenile
     await fetchNotifications();
   }
+  Future<void> toggleFollowNotification(String notificationId, String userId) async {
+    final docRef = _firestore.collection('notifications').doc(notificationId);
+    final doc = await docRef.get();
+    
+    if (doc.exists) {
+      List followers = doc.data()?['followers'] ?? [];
+      
+      if (followers.contains(userId)) {
+        // Zaten takip ediyorsa listeden çıkar (Takibi Bırak)
+        await docRef.update({
+          'followers': FieldValue.arrayRemove([userId])
+        });
+      } else {
+        // Takip etmiyorsa listeye ekle (Takip Et)
+        await docRef.update({
+          'followers': FieldValue.arrayUnion([userId])
+        });
+      }
+      // Yerel listeyi güncellemek için tekrar çek
+      await fetchNotifications();
+    }
+  }
+
+  // 🔥 2. Sadece Takip Edilen Bildirimleri Getiren Getter
+  // Profil sayfasında bu listeyi kullanacağız.
+  List<NotificationModel> getFollowedNotifications(String userId) {
+    return notifications.where((notif) {
+      // NotificationModel içinde 'followers' listesi olduğunu varsayıyoruz
+      // Eğer modelinizde yoksa, model dosyanıza da 'followers' eklemelisiniz.
+      return notif.followers.contains(userId);
+    }).toList();
+  }
 }

@@ -10,6 +10,7 @@ class NotificationModel {
   Timestamp date;
   String createdBy;
   String createdByName;
+  final List<String> followers;
 
   NotificationModel({
     this.notifId,
@@ -21,6 +22,7 @@ class NotificationModel {
     required this.date,
     required this.createdBy,
     required this.createdByName,
+    required this.followers,
   });
 
   // Firestore -> Model
@@ -36,6 +38,7 @@ class NotificationModel {
       date: map['date'] ?? Timestamp.now(),
       createdBy: map['createdBy'] ?? '',
       createdByName: map['createdByName'] ?? '',
+      followers: List<String>.from(map['followers'] ?? []),
 
     );
   }
@@ -51,7 +54,7 @@ class NotificationModel {
       "date": date,
       "createdBy": createdBy,
       "createdByName": createdByName,
-
+      "followers": followers,
     };
   }
 }

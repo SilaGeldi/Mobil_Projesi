@@ -1,3 +1,4 @@
+import 'package:akilli_kampus_proje/views/main/profile_page.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -128,27 +129,27 @@ class HomePage extends StatelessWidget {
       ),
 
       // 🔽 ALT BAR
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 1,
-        onTap: (index) {
-          if (index == 0) debugPrint("Harita");
-          if (index == 2) debugPrint("Profil");
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.map_outlined),
-            label: "Harita",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: "Ana Sayfa",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: "Profil",
-          ),
-        ],
-      ),
+bottomNavigationBar: BottomNavigationBar(
+  currentIndex: 1, // Ana Sayfa seçili
+  onTap: (index) {
+    if (index == 0) {
+      debugPrint("Harita");
+      // İleride buraya MapPage() gelecek
+    } 
+    if (index == 2) {
+      // 🚀 PROFİL SAYFASINA GİDİŞ
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const ProfilePage()),
+      );
+    }
+  },
+  items: const [
+    BottomNavigationBarItem(icon: Icon(Icons.map_outlined), label: "Harita"),
+    BottomNavigationBarItem(icon: Icon(Icons.home), label: "Ana Sayfa"),
+    BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profil"),
+  ],
+),
     );
   }
 

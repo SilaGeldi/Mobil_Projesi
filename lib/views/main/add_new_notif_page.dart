@@ -77,6 +77,7 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
       date: Timestamp.now(),
       createdBy: user.uid,
       createdByName: user.name,
+      followers: [],
     );
 
     await context

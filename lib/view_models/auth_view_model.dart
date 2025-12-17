@@ -1,5 +1,5 @@
 // lib/view_models/auth_view_model.dart (SON HALİ - YAPISAL OLARAK DÜZELTİLMİŞ)
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
@@ -146,4 +146,24 @@ class AuthViewModel extends ChangeNotifier {
     _currentUser = null;
     notifyListeners(); // Consumer'ı uyandır ki LoginView'a dönsün
   }
+
+  // Kullanıcı tercihlerini Firestore'da günceller
+Future<void> updateNotificationPreference(String key, bool value) async {
+  if (_currentUser == null) return;
+  
+  try {
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(_currentUser!.uid)
+        .update({
+      'preferences.$key': value,
+    });
+    
+    // Yerel modeldeki tercihi güncelle
+    _currentUser!.preferences[key] = value;
+    notifyListeners(); // Arayüzdeki switch'in yerini değiştirmesini sağlar
+  } catch (e) {
+    print("Hata: $e");
+  }
+}
 }
