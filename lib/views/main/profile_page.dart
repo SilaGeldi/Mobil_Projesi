@@ -52,7 +52,7 @@ class ProfilePage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 30),
-                  
+
                   const Text("Kurum Bilgileri", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
@@ -65,49 +65,50 @@ class ProfilePage extends StatelessWidget {
                   // 2. Bildirim Ayarları (Gereksinim 7)
                   const Text("Bildirim Tercihleri", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   // Sağlık ve Güvenlik Switch'i
-SwitchListTile(
-  contentPadding: EdgeInsets.zero,
-  title: const Text("Sağlık ve Güvenlik"),
-  // null safety için ünlem veya varsayılan değer kullanıyoruz
-  value: user.preferences['health'] ?? true, 
-  onChanged: (val) {
-    authViewModel.updateNotificationPreference('health', val);
-  },
-),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text("Sağlık ve Güvenlik"),
+                    value: user.preferences['health'] ?? true,
+                    onChanged: (val) {
+                      authViewModel.updateNotificationPreference('health', val);
+                    },
+                  ),
 
-// Teknik Arızalar Switch'i
-SwitchListTile(
-  contentPadding: EdgeInsets.zero,
-  title: const Text("Teknik Arızalar"),
-  value: user.preferences['technical'] ?? true,
-  onChanged: (val) {
-    authViewModel.updateNotificationPreference('technical', val);
-  },
-),
+                  // Teknik Arızalar Switch'i
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text("Teknik Arızalar"),
+                    value: user.preferences['technical'] ?? true,
+                    onChanged: (val) {
+                      authViewModel.updateNotificationPreference('technical', val);
+                    },
+                  ),
                   const Divider(),
 
-                  // 3. Takip Edilen Bildirimler
-                 // ProfilePage içindeki Takip Edilenler ListTile'ı için yönlendirme mantığı:
+                  // 3. Takip Edilen Bildirimler (Gereksinim 7)
+                  // 🔥 Consumer eklenerek sayının anlık güncellenmesi sağlandı
+                  Consumer<NotificationViewModel>(
+                    builder: (context, notificationVM, child) {
+                      final followedCount = notificationVM.getFollowedNotifications(user.uid).length;
 
-ListTile(
-  contentPadding: EdgeInsets.zero,
-  leading: const Icon(Icons.bookmark_outline),
-  title: const Text("Takip Ettiğim Bildirimler"),
-  // Takip edilen bildirim sayısını göstermek için:
-  trailing: CircleAvatar(
-    radius: 12,
-    backgroundColor: Colors.deepPurple,
-    child: Text(
-      context.read<NotificationViewModel>().getFollowedNotifications(user!.uid).length.toString(),
-      style: const TextStyle(fontSize: 12, color: Colors.white),
-    ),
-  ),
-  onTap: () {
-    // Burada yeni bir sayfaya yönlendirebiliriz veya 
-    // bir ModalBottomSheet açıp listeyi gösterebiliriz.
-    _showFollowedNotifications(context, user.uid);
-  },
-),
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.bookmark_outline),
+                        title: const Text("Takip Ettiğim Bildirimler"),
+                        trailing: CircleAvatar(
+                          radius: 12,
+                          backgroundColor: Colors.deepPurple,
+                          child: Text(
+                            followedCount.toString(),
+                            style: const TextStyle(fontSize: 12, color: Colors.white),
+                          ),
+                        ),
+                        onTap: () {
+                          _showFollowedNotifications(context, user.uid);
+                        },
+                      );
+                    },
+                  ),
                   const SizedBox(height: 30),
 
                   // 4. Çıkış Yap (Gereksinim 7)
@@ -116,11 +117,13 @@ ListTile(
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         await authViewModel.signOut();
-                         Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (context) => const LoginView()),
-                      );
-                        // SignOut sonrası AuthViewModel'deki notifyListeners() tetiklenir
-                        // Eğer main.dart'ta StreamBuilder veya Consumer varsa otomatik Login'e atar.
+                        // 🔥 Navigasyon geçmişi temizlenerek Login ekranına yönlendirilir
+                        if (context.mounted) {
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(builder: (context) => const LoginView()),
+                            (route) => false,
+                          );
+                        }
                       },
                       icon: const Icon(Icons.logout),
                       label: const Text("Çıkış Yap"),
@@ -135,62 +138,74 @@ ListTile(
             ),
     );
   }
-  
+
   void _showFollowedNotifications(BuildContext context, String uid) {
     showModalBottomSheet(
-    context: context,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
-    builder: (context) {
-      // NotificationViewModel'i dinliyoruz
-      return Consumer<NotificationViewModel>(
-        builder: (context, notificationVM, child) {
-          final followedList = notificationVM.getFollowedNotifications(uid);
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Consumer<NotificationViewModel>(
+          builder: (context, notificationVM, child) {
+            final followedList = notificationVM.getFollowedNotifications(uid);
 
-          return Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  "Takip Ettiğim Bildirimler",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const Divider(),
-                followedList.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(20.0),
-                        child: Text("Henüz takip ettiğiniz bir bildirim yok."),
-                      )
-                    : Expanded(
-                        child: ListView.builder(
-                          itemCount: followedList.length,
-                          itemBuilder: (context, index) {
-                            final item = followedList[index];
-                            return ListTile(
-                              leading: const Icon(Icons.info_outline, color: Colors.deepPurple),
-                              title: Text(item.title),
-                              subtitle: Text("Durum: ${item.status}"),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.bookmark_remove, color: Colors.red),
-                                onPressed: () {
-                                  // Takibi bırakma işlemi
-                                  notificationVM.toggleFollowNotification(item.notifId!, uid);
+            return DraggableScrollableSheet(
+              initialChildSize: 0.6,
+              maxChildSize: 0.9,
+              minChildSize: 0.4,
+              expand: false,
+              builder: (context, scrollController) {
+                return Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)),
+                      ),
+                      const Text(
+                        "Takip Ettiğim Bildirimler",
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const Divider(),
+                      followedList.isEmpty
+                          ? const Expanded(
+                              child: Center(
+                                child: Text("Henüz takip ettiğiniz bir bildirim yok."),
+                              ),
+                            )
+                          : Expanded(
+                              child: ListView.builder(
+                                controller: scrollController,
+                                itemCount: followedList.length,
+                                itemBuilder: (context, index) {
+                                  final item = followedList[index];
+                                  return ListTile(
+                                    leading: const Icon(Icons.info_outline, color: Colors.deepPurple),
+                                    title: Text(item.title),
+                                    subtitle: Text("Durum: ${item.status}"),
+                                    trailing: IconButton(
+                                      icon: const Icon(Icons.bookmark_remove, color: Colors.red),
+                                      onPressed: () {
+                                        notificationVM.toggleFollowNotification(item.notifId!, uid);
+                                      },
+                                    ),
+                                  );
                                 },
                               ),
-                            );
-                          },
-                        ),
-                      ),
-              ],
-            ),
-          );
-        },
-      );
-    },
-  );
+                            ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
   }
-  
 }
-
