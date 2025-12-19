@@ -1,7 +1,6 @@
 // lib/views/auth/login_view.dart
-
-import 'package:akilli_kampus_proje/main.dart';
-import 'package:akilli_kampus_proje/views/main/home_page.dart';
+import 'package:akilli_kampus_proje/views/admin/admin_home_view.dart';
+import 'package:akilli_kampus_proje/views/main/main_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../view_models/auth_view_model.dart';
@@ -61,7 +60,7 @@ class _LoginViewState extends State<LoginView> {
         } else {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const HomePage()),
+            MaterialPageRoute(builder: (_) => const MainScreen()),
           );
         }
       } else if (viewModel.errorMessage != null && mounted) {

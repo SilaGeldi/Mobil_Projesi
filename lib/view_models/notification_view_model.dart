@@ -65,4 +65,23 @@ class NotificationViewModel extends ChangeNotifier {
       return notif.followers.contains(userId);
     }).toList();
   }
+
+  // Belirli bir bildirimin durumunu (status) güncellemek için
+Future<void> updateNotificationStatus(String notificationId, String newStatus) async {
+  try {
+    await _firestore
+        .collection('notifications')
+        .doc(notificationId)
+        .update({'status': newStatus});
+
+    // Yerel listedeki durumu da anında güncelle ki arayüz yenilensin
+    final index = notifications.indexWhere((n) => n.notifId == notificationId);
+    if (index != -1) {
+      notifications[index].status = newStatus;
+      notifyListeners();
+    }
+  } catch (e) {
+    debugPrint("Durum güncelleme hatası: $e");
+  }
+}
 }

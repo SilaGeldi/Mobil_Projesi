@@ -1,3 +1,4 @@
+import 'package:akilli_kampus_proje/views/admin/admin_home_view.dart';
 import 'package:akilli_kampus_proje/views/main/main_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -58,67 +59,30 @@ class RootRouter extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AuthViewModel>(
       builder: (context, authViewModel, _) {
-        if (authViewModel.currentUser != null) {
-          return authViewModel.currentUser!.role == "admin"
-              ? const MainScreen()
-              : const MainScreen(); // 🔥 HomePage yerine MainScreen döndürüyoruz
+        // 1. Kullanıcı oturum açmamışsa doğrudan Login'e gönder
+        if (authViewModel.currentUser == null) {
+          return const LoginView();
         }
-        return const LoginView();
+
+        final user = authViewModel.currentUser!;
+
+        // 2. Eğer rol bilgisi henüz gelmemişse (beklenmedik bir durum için koruma)
+        if (user.role.isEmpty) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+
+        // 3. Rol kontrolüne göre yönlendirme
+        if (user.role == "admin") {
+          return const AdminHomeView();
+        } else {
+          // Navigasyon barının görünmesi için MainScreen'e gitmeli
+          return const MainScreen(); 
+        }
       },
     );
   }
 }
 
-/// ---------------------------------------------------------------
-///                       ÖRNEK SAYFALAR
-/// ---------------------------------------------------------------
-class AdminHomeView extends StatelessWidget {
-  const AdminHomeView({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    // AuthViewModel'e erişiyoruz
-    final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Admin Paneli"),
-        actions: [
-          // 🚪 Sağ üst köşeye çıkış butonu
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await authViewModel.signOut();
-              // Consumer sayesinde RootRouter otomatik olarak LoginView'a dönecektir.
-            },
-          ),
-        ],
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.admin_panel_settings, size: 80, color: Colors.red),
-            const SizedBox(height: 20),
-            const Text(
-              "Admin Girişi Başarılı",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 40),
-            // 🛑 Alternatif olarak ekranın ortasına büyük bir buton da ekleyebilirsin
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              onPressed: () async {
-                await authViewModel.signOut();
-              },
-              icon: const Icon(Icons.exit_to_app, color: Colors.white),
-              label: const Text("Oturumu Kapat", style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 

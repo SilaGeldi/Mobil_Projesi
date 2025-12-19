@@ -12,12 +12,12 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 1; // Başlangıçta "Ana Sayfa" (orta sekme) seçili olsun
 
-  // Sayfa Listesi
-  final List<Widget> _pages = [
-    const Center(child: Text("Harita Sayfası Hazırlanıyor")), // İndex 0
-    const HomePage(),    // İndex 1
-    const ProfilePage(), // İndex 2
-  ];
+  
+ final List<Widget> _pages = [
+   const Center(child: Text("Harita Sayfası Hazırlanıyor")), // İndex 0
+ const HomePage(),   
+    const ProfilePage(), 
+ ];
 
   @override
   Widget build(BuildContext context) {
