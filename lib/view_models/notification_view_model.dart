@@ -56,8 +56,8 @@ class NotificationViewModel extends ChangeNotifier {
     }
   }
 
-  // 🔥 2. Sadece Takip Edilen Bildirimleri Getiren Getter
-  // Profil sayfasında bu listeyi kullanacağız.
+
+
   List<NotificationModel> getFollowedNotifications(String userId) {
     return notifications.where((notif) {
       // NotificationModel içinde 'followers' listesi olduğunu varsayıyoruz
@@ -83,5 +83,21 @@ Future<void> updateNotificationStatus(String notificationId, String newStatus) a
   } catch (e) {
     debugPrint("Durum güncelleme hatası: $e");
   }
+}
+
+// Açıklama Güncelleme
+Future<void> updateNotificationDescription(String id, String newDesc) async {
+  await _firestore.collection('notifications').doc(id).update({'description': newDesc});
+  await fetchNotifications();
+}
+
+// Bildirimi Silme
+Future<void> deleteNotification(String id) async {
+  await _firestore.collection('notifications').doc(id).delete();
+  await fetchNotifications();
+}
+
+List<NotificationModel> getAdminFilteredNotifications(String adminUnit) {
+  return notifications.where((n) => n.type == adminUnit.toLowerCase()).toList();
 }
 }

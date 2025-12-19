@@ -1,4 +1,3 @@
-import 'package:akilli_kampus_proje/views/admin/admin_home_view.dart';
 import 'package:akilli_kampus_proje/views/main/main_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -71,13 +70,11 @@ class RootRouter extends StatelessWidget {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
 
-        // 3. Rol kontrolüne göre yönlendirme
-        if (user.role == "admin") {
-          return const AdminHomeView();
-        } else {
-          // Navigasyon barının görünmesi için MainScreen'e gitmeli
-          return const MainScreen(); 
-        }
+      if (user.role == "admin") {
+  return const MainScreen(); // 🔥 Admin olsa bile MainScreen döndürülmeli!
+} else {
+  return const MainScreen(); // Normal kullanıcı da MainScreen'e gitmeli
+}
       },
     );
   }
