@@ -4,6 +4,7 @@ import '../../view_models/auth_view_model.dart';
 import '../admin/admin_home_view.dart';
 import 'home_page.dart';
 import 'profile_page.dart';
+import 'package:akilli_kampus_proje/views/main/map_view.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -23,7 +24,7 @@ class _MainScreenState extends State<MainScreen> {
 
     // 2. Sayfa listesini build içinde tanımlıyoruz ki isAdmin her değişimde güncellensin
     final List<Widget> _pages = [
-      const Center(child: Text("Harita Sayfası Hazırlanıyor")), // İndex 0
+      const MapView(), // İndex 0
       isAdmin ? const AdminHomeView() : const HomePage(),      // İndex 1 (Dinamik)
       const ProfilePage(),                                    // İndex 2
     ];
