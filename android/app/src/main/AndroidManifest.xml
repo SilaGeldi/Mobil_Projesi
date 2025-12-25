@@ -3,12 +3,13 @@
     <!-- 📍 KONUM İZİNLERİ -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
 
     <application
         android:label="akilli_kampus_proje"
         android:icon="@mipmap/ic_launcher">
 
-        <!-- 🗺 GOOGLE MAPS API KEY -->
+        <!--  GOOGLE MAPS API KEY -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyDoj5H6FdEdnTe3wE0PHR0IGPoSLffIezQ"/>
