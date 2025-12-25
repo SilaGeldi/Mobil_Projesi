@@ -1,6 +1,11 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:provider/provider.dart';
+import '../../models/notification_model.dart';
+import '../../view_models/notification_view_model.dart';
+import 'notification_detail_page.dart';
 
 class MapView extends StatefulWidget {
   const MapView({super.key});
@@ -12,37 +17,12 @@ class MapView extends StatefulWidget {
 class _MapViewState extends State<MapView> {
   final Completer<GoogleMapController> _controller = Completer();
 
-  // Şimdilik sabit merkez: kampüs vb. (sonra dinamik yaparız)
-  static const LatLng _initialCenter = LatLng(39.925533, 32.866287); // Ankara örnek
+  static const LatLng _initialCenter = LatLng(39.925533, 32.866287);
 
-  // Demo pinler (sonra Firebase/Model’den çekeceğiz)
-  final List<_MapNotif> _items = [
-    _MapNotif(
-      id: "1",
-      title: "Kayıp Buluntu",
-      type: "kayip",
-      createdAt: DateTime.now().subtract(const Duration(minutes: 12)),
-      position: const LatLng(39.9259, 32.8669),
-    ),
-    _MapNotif(
-      id: "2",
-      title: "Güvenlik",
-      type: "guvenlik",
-      createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-      position: const LatLng(39.9252, 32.8656),
-    ),
-  ];
-
-  _MapNotif? _selected;
-
-  BitmapDescriptor _iconForType(String type) {
-    // Şimdilik default marker + renk farkı için hue kullanacağız (basit ve stabil)
-    // İkon istersen sonraki adımda asset marker’a geçeriz.
-    return BitmapDescriptor.defaultMarker;
-  }
+  NotificationModel? _selected;
 
   double _hueForType(String type) {
-    switch (type) {
+    switch (type.toLowerCase()) {
       case "guvenlik":
         return BitmapDescriptor.hueRed;
       case "duyuru":
@@ -54,18 +34,45 @@ class _MapViewState extends State<MapView> {
     }
   }
 
-  Set<Marker> get _markers => _items.map((e) {
-    return Marker(
-      markerId: MarkerId(e.id),
-      position: e.position,
-      icon: BitmapDescriptor.defaultMarkerWithHue(_hueForType(e.type)),
-      infoWindow: InfoWindow(title: e.title),
-      onTap: () => setState(() => _selected = e),
-    );
-  }).toSet();
+  LatLng _toLatLng(dynamic location) {
+    // Sende location GeoPoint ise:
+    if (location is GeoPoint) {
+      return LatLng(location.latitude, location.longitude);
+    }
+    // Sende location zaten LatLng ise:
+    if (location is LatLng) return location;
+
+    // Eğer farklı bir yapıysa burayı notification_model.dart’a göre düzenleyeceğiz.
+    return _initialCenter;
+  }
+
+  Set<Marker> _buildMarkers(List<NotificationModel> list) {
+    return list.map((n) {
+      final pos = _toLatLng(n.location); // <- alan adı sende farklı olabilir
+      final id = n.notifId ?? "";        // <- alan adı sende farklı olabilir
+      return Marker(
+        markerId: MarkerId(id),
+        position: pos,
+        icon: BitmapDescriptor.defaultMarkerWithHue(_hueForType(n.type)),
+        infoWindow: InfoWindow(title: n.title),
+        onTap: () => setState(() => _selected = n),
+      );
+    }).toSet();
+  }
+
+  String _timeAgo(Timestamp ts) {
+    final dt = ts.toDate();
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) return "${diff.inMinutes} dk önce";
+    if (diff.inHours < 24) return "${diff.inHours} saat önce";
+    return "${diff.inDays} gün önce";
+  }
 
   @override
   Widget build(BuildContext context) {
+    final notifVM = context.watch<NotificationViewModel>();
+    final list = notifVM.notifications; // zaten HomePage’de kullandığın liste
+
     return Scaffold(
       appBar: AppBar(title: const Text("Harita")),
       body: Stack(
@@ -75,23 +82,30 @@ class _MapViewState extends State<MapView> {
               target: _initialCenter,
               zoom: 15,
             ),
-            markers: _markers,
+            markers: _buildMarkers(list),
             myLocationButtonEnabled: true,
-            zoomControlsEnabled: true, // yakınlaştır/uzaklaştır
+            zoomControlsEnabled: true,
             onMapCreated: (c) => _controller.complete(c),
             onTap: (_) => setState(() => _selected = null),
           ),
 
-          // Pin bilgi kartı
           if (_selected != null)
             Align(
               alignment: Alignment.bottomCenter,
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: _PinCard(
-                  item: _selected!,
+                  title: _selected!.title,
+                  subtitle: "Tür: ${_selected!.type} • ${_timeAgo(_selected!.date)}", // date alanı
                   onDetail: () {
-                    // TODO: Detay ekranına yönlendireceğiz (Adım 4)
+                    final selected = _selected;
+                    if (selected == null) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => NotificationDetailPage(notification: selected),
+                      ),
+                    );
                   },
                 ),
               ),
@@ -103,17 +117,15 @@ class _MapViewState extends State<MapView> {
 }
 
 class _PinCard extends StatelessWidget {
-  final _MapNotif item;
+  final String title;
+  final String subtitle;
   final VoidCallback onDetail;
 
-  const _PinCard({required this.item, required this.onDetail});
-
-  String _timeAgo(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 60) return "${diff.inMinutes} dk önce";
-    if (diff.inHours < 24) return "${diff.inHours} saat önce";
-    return "${diff.inDays} gün önce";
-  }
+  const _PinCard({
+    required this.title,
+    required this.subtitle,
+    required this.onDetail,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -133,9 +145,9 @@ class _PinCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 6),
-                  Text("Tür: ${item.type} • ${_timeAgo(item.createdAt)}"),
+                  Text(subtitle),
                 ],
               ),
             ),
@@ -149,20 +161,4 @@ class _PinCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _MapNotif {
-  final String id;
-  final String title;
-  final String type;
-  final DateTime createdAt;
-  final LatLng position;
-
-  _MapNotif({
-    required this.id,
-    required this.title,
-    required this.type,
-    required this.createdAt,
-    required this.position,
-  });
 }
