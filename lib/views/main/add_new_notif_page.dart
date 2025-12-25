@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart'; // 🔥 Harita hareketi için gerekli
+import 'package:flutter/gestures.dart';    // 🔥 Harita hareketi için gerekli
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:geolocator/geolocator.dart';
@@ -28,11 +30,8 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
   bool loadingLocation = false;
   bool locationFromDevice = false;
 
-  // 🏫 Kampüs başlangıç konumu
-// 🏫 Atatürk Üniversitesi Kampüs Konumu
-  static const LatLng campusLocation =
-  LatLng(39.9009, 41.2640);
-
+  // 🏫 Atatürk Üniversitesi Kampüs Konumu
+  static const LatLng campusLocation = LatLng(39.9009, 41.2640);
   late LatLng mapCenter = campusLocation;
 
   // 📱 Cihaz konumu al
@@ -56,6 +55,7 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
     });
   }
 
+  // 💾 BİLDİRİM KAYDET VE ONAY MESAJI
   Future<void> saveNotification() async {
     if (titleController.text.isEmpty ||
         descController.text.isEmpty ||
@@ -66,25 +66,48 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
       return;
     }
 
-    final user = context.read<AuthViewModel>().currentUser!;
+    try {
+      final user = context.read<AuthViewModel>().currentUser!;
 
-    final notif = NotificationModel(
-      title: titleController.text.trim(),
-      description: descController.text.trim(),
-      type: selectedType,
-      status: defaultStatus,
-      location: selectedLocation!,
-      date: Timestamp.now(),
-      createdBy: user.uid,
-      createdByName: user.name,
-      followers: [],
-    );
+      final notif = NotificationModel(
+        title: titleController.text.trim(),
+        description: descController.text.trim(),
+        type: selectedType,
+        status: defaultStatus,
+        location: selectedLocation!,
+        date: Timestamp.now(),
+        createdBy: user.uid,
+        createdByName: user.name,
+        followers: [],
+      );
 
-    await context
-        .read<NotificationViewModel>()
-        .addNotification(notif);
+      await context.read<NotificationViewModel>().addNotification(notif);
 
-    Navigator.pop(context);
+      // ✅ BAŞARI MESAJI (SnackBar)
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 10),
+                Text("Bildiriminiz başarıyla eklendi!"),
+              ],
+            ),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        Navigator.pop(context); // İşlem başarılıysa geri dön
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Bir hata oluştu: $e"), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   // 🔲 Ortak Form Kartı
@@ -104,7 +127,13 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Yeni Bildirim")),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text("Yeni Bildirim", style: TextStyle(color: Colors.black)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -113,6 +142,9 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
             formCard(
               child: TextField(
                 controller: titleController,
+                keyboardType: TextInputType.multiline, // Standart text yerine multiline daha esnektir
+                enableSuggestions: true,
+                autocorrect: true,
                 decoration: const InputDecoration(
                   labelText: "Bildirim Başlığı",
                   border: InputBorder.none,
@@ -126,6 +158,9 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
                 controller: descController,
                 minLines: 4,
                 maxLines: 6,
+                keyboardType: TextInputType.multiline,
+                enableSuggestions: true,
+                autocorrect: true,
                 decoration: const InputDecoration(
                   labelText: "Açıklama",
                   border: InputBorder.none,
@@ -142,23 +177,15 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
                   border: InputBorder.none,
                 ),
                 items: const [
-                  DropdownMenuItem(
-                      value: "duyuru", child: Text("Duyuru")),
-                  DropdownMenuItem(
-                      value: "acil", child: Text("Acil")),
-                  DropdownMenuItem(
-                      value: "saglik", child: Text("Sağlık")),
-                  DropdownMenuItem(
-                      value: "kayip", child: Text("Kayıp")),
-                  DropdownMenuItem(
-                      value: "guvenlik",
-                      child: Text("Güvenlik")),
-                  DropdownMenuItem(
-                      value: "diger",
-                      child: Text("Diğer")),
+                  DropdownMenuItem(value: "duyuru", child: Text("Duyuru")),
+                  DropdownMenuItem(value: "saglik", child: Text("Sağlık")),
+                  DropdownMenuItem(value: "kayip", child: Text("Kayıp")),
+                  DropdownMenuItem(value: "guvenlik", child: Text("Güvenlik")),
+                  DropdownMenuItem(value: "cevre", child: Text("Çevre")),
+                  DropdownMenuItem(value: "teknikAriza", child: Text("Teknik Arıza")),
+                  DropdownMenuItem(value: "diger", child: Text("Diğer")),
                 ],
-                onChanged: (v) =>
-                    setState(() => selectedType = v!),
+                onChanged: (v) => setState(() => selectedType = v!),
               ),
             ),
 
@@ -168,8 +195,7 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ElevatedButton.icon(
-                    onPressed:
-                    loadingLocation ? null : useDeviceLocation,
+                    onPressed: loadingLocation ? null : useDeviceLocation,
                     icon: const Icon(Icons.my_location),
                     label: Text(
                       loadingLocation
@@ -178,57 +204,85 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
                           ? "Cihaz konumu alındı ✓"
                           : "Cihaz konumunu kullan",
                     ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      elevation: 0,
+                      side: const BorderSide(color: Colors.grey),
+                    ),
                   ),
                   const SizedBox(height: 12),
 
                   // 🗺️ HARİTA
                   SizedBox(
-                    height: 220,
-                    child: GoogleMap(
-                      initialCameraPosition:
-                      CameraPosition(
-                        target: mapCenter,
-                        zoom: 16,
-                      ),
-                      myLocationEnabled: true,
-                      myLocationButtonEnabled: false,
-                      onCameraMove: (pos) {
-                        mapCenter = pos.target;
-                      },
-                      onCameraIdle: () {
-                        setState(() {
-                          selectedLocation = GeoPoint(
-                            mapCenter.latitude,
-                            mapCenter.longitude,
-                          );
-                        });
-                      },
-                      markers: {
-                        Marker(
-                          markerId:
-                          const MarkerId("selected"),
-                          position: mapCenter,
+                    height: 250,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: GoogleMap(
+                        // 🔥 HARİTA HAREKETİNİ DÜZELTEN KISIM
+                        gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                          Factory<OneSequenceGestureRecognizer>(
+                                () => EagerGestureRecognizer(),
+                          ),
+                        },
+                        initialCameraPosition: CameraPosition(
+                          target: mapCenter,
+                          zoom: 16,
                         ),
-                      },
+                        myLocationEnabled: true,
+                        myLocationButtonEnabled: false,
+                        onCameraMove: (pos) {
+                          mapCenter = pos.target;
+                        },
+                        onCameraIdle: () {
+                          setState(() {
+                            selectedLocation = GeoPoint(
+                              mapCenter.latitude,
+                              mapCenter.longitude,
+                            );
+                          });
+                        },
+                        markers: {
+                          Marker(
+                            markerId: const MarkerId("selected"),
+                            position: mapCenter,
+                          ),
+                        },
+                      ),
                     ),
                   ),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      "* Haritayı kaydırarak konumu belirleyebilirsiniz.",
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  )
                 ],
               ),
             ),
 
-            const SizedBox(height: 12),
+            const SizedBox(height: 20),
 
-            // 💾 KAYDET
+            // 💾 KAYDET BUTONU
             SizedBox(
               width: double.infinity,
+              height: 55,
               child: ElevatedButton(
                 onPressed: saveNotification,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0D47A1), // 🔥 Koyu Mavi
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
                 child: const Text(
                   "Bildirim Oluştur",
-                  style: TextStyle(fontSize: 16),
+                  style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
+            const SizedBox(height: 30),
           ],
         ),
       ),

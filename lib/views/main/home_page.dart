@@ -6,8 +6,8 @@ import '../../view_models/notification_view_model.dart';
 import '../../view_models/auth_view_model.dart';
 import '../../models/notification_model.dart';
 import 'add_new_notif_page.dart';
-import 'notification_detail_page.dart'; // Detay sayfasını import edin
-import 'profile_page.dart'; // Profil sayfasını import edin
+import 'notification_detail_page.dart';
+import 'profile_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -20,8 +20,8 @@ class _HomePageState extends State<HomePage> {
   String searchQuery = "";
   String? selectedStatus;
   String? selectedType;
+  bool showOnlyFollowed = false; // 🔥 Takip edilenler filtresi için değişken
 
-  // Kullanıcı adının baş harflerini büyütme fonksiyonu
   String capitalize(String name) {
     if (name.isEmpty) return name;
     return name.split(' ').map((str) {
@@ -37,20 +37,23 @@ class _HomePageState extends State<HomePage> {
     final user = authVM.currentUser;
     final userName = capitalize(user?.name ?? "Kullanıcı");
 
-    // 🔥 FİLTRELEME, ARAMA VE TERCİH MANTIĞI BİRLEŞTİRİLDİ
     final filteredNotifications = notifVM.notifications.where((n) {
-      // 1. Arkadaşının eklediği kategori tercih kontrolü
+      // 1. Kullanıcı Tercihleri
       if (user != null) {
-        // Not: user.preferences yapısı modelinizde tanımlı olmalıdır
         if (n.type == 'sağlık' && !(user.preferences['health'] ?? true)) return false;
         if (n.type == 'teknik' && !(user.preferences['technical'] ?? true)) return false;
       }
 
-      // 2. Arama Sorgusu Kontrolü
+      // 2. Takip Edilenler Filtresi
+      if (showOnlyFollowed && user != null) {
+        if (!n.followers.contains(user.uid)) return false;
+      }
+
+      // 3. Arama Sorgusu
       final matchesSearch = n.title.toLowerCase().contains(searchQuery.toLowerCase()) ||
           n.description.toLowerCase().contains(searchQuery.toLowerCase());
 
-      // 3. Durum ve Tür Filtresi Kontrolü
+      // 4. Durum ve Tür Filtresi
       final matchesStatus = selectedStatus == null || n.status == selectedStatus;
       final matchesType = selectedType == null || n.type == selectedType;
 
@@ -76,7 +79,6 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           children: [
             const SizedBox(height: 10),
-            // 🔍 ARAMA + FİLTRE BUTONU
             Row(
               children: [
                 Expanded(
@@ -96,14 +98,19 @@ class _HomePageState extends State<HomePage> {
                   onTap: () => _showFilterBottomSheet(context),
                   child: Container(
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(12)),
+                    decoration: BoxDecoration(
+                      // Eğer bir filtre aktifse buton rengini değiştirerek kullanıcıya belirtiyoruz
+                        color: (selectedStatus != null || selectedType != null || showOnlyFollowed)
+                            ? Colors.blueAccent
+                            : Colors.black,
+                        borderRadius: BorderRadius.circular(12)
+                    ),
                     child: const Icon(Icons.filter_list, color: Colors.white),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            // 📢 LİSTELEME
             Expanded(
               child: filteredNotifications.isEmpty
                   ? const Center(child: Text("Sonuç bulunamadı", style: TextStyle(color: Colors.grey)))
@@ -125,27 +132,13 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.black,
+        backgroundColor: const Color(0xFF0D47A1), // 🔥 Koyu Mavi FAB
         child: const Icon(Icons.add, color: Colors.white),
         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddNewNotificationPage())),
       ),
-      /*bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 1,
-        onTap: (index) {
-          if (index == 2) {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage()));
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.map_outlined), label: "Harita"),
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Ana Sayfa"),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profil"),
-        ],
-      ), */
     );
   }
 
-  // 🛠 FİLTRELEME BOTTOM SHEET
   void _showFilterBottomSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -154,51 +147,70 @@ class _HomePageState extends State<HomePage> {
         return StatefulBuilder(builder: (context, setModalState) {
           return Padding(
             padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text("Filtrele", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 20),
-                const Text("Durum", style: TextStyle(fontWeight: FontWeight.bold)),
-                Wrap(
-                  spacing: 8,
-                  children: ["aktif", "pasif", "inceleniyor"].map((s) {
-                    return ChoiceChip(
-                      label: Text(s),
-                      selected: selectedStatus == s,
-                      onSelected: (val) => setState(() {
-                        selectedStatus = val ? s : null;
-                        setModalState(() {});
-                      }),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 15),
-                const Text("Tür", style: TextStyle(fontWeight: FontWeight.bold)),
-                Wrap(
-                  spacing: 8,
-                  children: ["sağlık", "kayıp", "güvenlik", "duyuru", "diğer"].map((t) {
-                    return ChoiceChip(
-                      label: Text(t),
-                      selected: selectedType == t,
-                      onSelected: (val) => setState(() {
-                        selectedType = val ? t : null;
-                        setModalState(() {});
-                      }),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text("Uygula", style: TextStyle(color: Colors.white)),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("Filtrele", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 20),
+
+                  // 🔥 TAKİP EDİLENLER BUTONU (Switch/Chip formunda)
+                  const Text("Özel Filtre", style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  FilterChip(
+                    label: const Text("Sadece Takip Ettiklerim"),
+                    selected: showOnlyFollowed,
+                    onSelected: (val) => setState(() {
+                      showOnlyFollowed = val;
+                      setModalState(() {});
+                    }),
+                    selectedColor: Colors.blue.shade100,
+                    checkmarkColor: Colors.blue,
                   ),
-                )
-              ],
+                  const SizedBox(height: 15),
+
+                  const Text("Durum", style: TextStyle(fontWeight: FontWeight.bold)),
+                  Wrap(
+                    spacing: 8,
+                    children: ["açık", "inceleniyor", "çözüldü"].map((s) {
+                      return ChoiceChip(
+                        label: Text(s),
+                        selected: selectedStatus == s,
+                        onSelected: (val) => setState(() {
+                          selectedStatus = val ? s : null;
+                          setModalState(() {});
+                        }),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 15),
+                  const Text("Tür", style: TextStyle(fontWeight: FontWeight.bold)),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: ["Sağlık", "Kayıp", "Güvenlik", "Duyuru", "Çevre", "Teknik Arıza", "Diğer"].map((t) {
+                      return ChoiceChip(
+                        label: Text(t),
+                        selected: selectedType == t,
+                        onSelected: (val) => setState(() {
+                          selectedType = val ? t : null;
+                          setModalState(() {});
+                        }),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text("Uygula", style: TextStyle(color: Colors.white)),
+                    ),
+                  )
+                ],
+              ),
             ),
           );
         });
@@ -206,11 +218,8 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 🔔 BİLDİRİM KARTI (ARKADAŞININ TAKİP MANTIĞI KORUNDU)
   Widget _buildNotificationCard(BuildContext context, NotificationModel notif, String? userId) {
     final notifVM = Provider.of<NotificationViewModel>(context, listen: false);
-
-    // Arkadaşının takip mantığı: followers listesinde userId var mı?
     final isFollowing = userId != null && notif.followers.contains(userId);
 
     return Container(
@@ -260,7 +269,10 @@ class _HomePageState extends State<HomePage> {
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(8)),
+                decoration: BoxDecoration(
+                    color: Colors.blue.shade400, // 🔥 Daha yumuşak mavi rengi
+                    borderRadius: BorderRadius.circular(8)
+                ),
                 child: Text(notif.type, style: const TextStyle(color: Colors.white, fontSize: 12)),
               ),
             ],
@@ -272,9 +284,9 @@ class _HomePageState extends State<HomePage> {
 
   Color _statusColor(String status) {
     switch (status.toLowerCase()) {
-      case "aktif": return Colors.green;
-      case "pasif": return Colors.grey;
+      case "açık": return Colors.green;
       case "inceleniyor": return Colors.orange;
+      case "çözüldü": return Colors.grey;
       default: return Colors.blueGrey;
     }
   }

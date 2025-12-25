@@ -176,9 +176,9 @@ class NotificationDetailPage extends StatelessWidget {
 
   Color _statusColor(String status) {
     switch (status.toLowerCase()) {
-      case "aktif": return Colors.green;
-      case "pasif": return Colors.grey;
+      case "açık": return Colors.green;
       case "inceleniyor": return Colors.orange;
+      case "çözüldü": return Colors.grey;
       default: return Colors.blueGrey;
     }
   }
