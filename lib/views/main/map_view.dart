@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:intl/intl.dart';
 
 class MapView extends StatefulWidget {
   const MapView({super.key});
@@ -10,59 +10,103 @@ class MapView extends StatefulWidget {
 }
 
 class _MapViewState extends State<MapView> {
-  GoogleMapController? _controller;
+  final Completer<GoogleMapController> _controller = Completer();
 
-  // Başlangıç konumu (kampüs vb.)
-  static const LatLng _initial = LatLng(39.925533, 32.866287); // Ankara örnek
+  // Şimdilik sabit merkez: kampüs vb. (sonra dinamik yaparız)
+  static const LatLng _initialCenter = LatLng(39.925533, 32.866287); // Ankara örnek
 
-  // Demo veri (sen Firestore’dan çekeceksin; şimdilik ekran çalışsın diye)
-  final _items = <_MapNotification>[
-    _MapNotification(
+  // Demo pinler (sonra Firebase/Model’den çekeceğiz)
+  final List<_MapNotif> _items = [
+    _MapNotif(
       id: "1",
       title: "Kayıp Buluntu",
       type: "kayip",
-      createdAt: DateTime.now().subtract(const Duration(minutes: 25)),
-      position: const LatLng(39.9262, 32.8649),
+      createdAt: DateTime.now().subtract(const Duration(minutes: 12)),
+      position: const LatLng(39.9259, 32.8669),
     ),
-    _MapNotification(
+    _MapNotif(
       id: "2",
       title: "Güvenlik",
       type: "guvenlik",
       createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-      position: const LatLng(39.9249, 32.8672),
-    ),
-    _MapNotification(
-      id: "3",
-      title: "Duyuru",
-      type: "duyuru",
-      createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      position: const LatLng(39.9259, 32.8685),
+      position: const LatLng(39.9252, 32.8656),
     ),
   ];
 
-  Set<Marker> get _markers {
-    return _items.map((n) {
-      return Marker(
-        markerId: MarkerId(n.id),
-        position: n.position,
-        icon: _iconByType(n.type),
-        onTap: () => _showPinCard(n),
-      );
-    }).toSet();
+  _MapNotif? _selected;
+
+  BitmapDescriptor _iconForType(String type) {
+    // Şimdilik default marker + renk farkı için hue kullanacağız (basit ve stabil)
+    // İkon istersen sonraki adımda asset marker’a geçeriz.
+    return BitmapDescriptor.defaultMarker;
   }
 
-  BitmapDescriptor _iconByType(String type) {
+  double _hueForType(String type) {
     switch (type) {
       case "guvenlik":
-        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
-      case "kayip":
-        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
+        return BitmapDescriptor.hueRed;
       case "duyuru":
-        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
+        return BitmapDescriptor.hueAzure;
+      case "kayip":
+        return BitmapDescriptor.hueOrange;
       default:
-        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet);
+        return BitmapDescriptor.hueViolet;
     }
   }
+
+  Set<Marker> get _markers => _items.map((e) {
+    return Marker(
+      markerId: MarkerId(e.id),
+      position: e.position,
+      icon: BitmapDescriptor.defaultMarkerWithHue(_hueForType(e.type)),
+      infoWindow: InfoWindow(title: e.title),
+      onTap: () => setState(() => _selected = e),
+    );
+  }).toSet();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Harita")),
+      body: Stack(
+        children: [
+          GoogleMap(
+            initialCameraPosition: const CameraPosition(
+              target: _initialCenter,
+              zoom: 15,
+            ),
+            markers: _markers,
+            myLocationButtonEnabled: true,
+            zoomControlsEnabled: true, // yakınlaştır/uzaklaştır
+            onMapCreated: (c) => _controller.complete(c),
+            onTap: (_) => setState(() => _selected = null),
+          ),
+
+          // Pin bilgi kartı
+          if (_selected != null)
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: _PinCard(
+                  item: _selected!,
+                  onDetail: () {
+                    // TODO: Detay ekranına yönlendireceğiz (Adım 4)
+                  },
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PinCard extends StatelessWidget {
+  final _MapNotif item;
+  final VoidCallback onDetail;
+
+  const _PinCard({required this.item, required this.onDetail});
 
   String _timeAgo(DateTime dt) {
     final diff = DateTime.now().difference(dt);
@@ -71,133 +115,50 @@ class _MapViewState extends State<MapView> {
     return "${diff.inDays} gün önce";
   }
 
-  void _zoomIn() => _controller?.animateCamera(CameraUpdate.zoomIn());
-  void _zoomOut() => _controller?.animateCamera(CameraUpdate.zoomOut());
-
-  void _showPinCard(_MapNotification n) {
-    showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      builder: (_) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      borderRadius: BorderRadius.circular(16),
+      elevation: 8,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: Colors.white,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _TypeChip(type: n.type),
-                  const Spacer(),
-                  Text(DateFormat("dd.MM.yyyy").format(n.createdAt)),
+                  Text(item.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 6),
+                  Text("Tür: ${item.type} • ${_timeAgo(item.createdAt)}"),
                 ],
               ),
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  n.title,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  _timeAgo(n.createdAt),
-                  style: const TextStyle(color: Colors.black54),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    // TODO: Sende detay ekranı varsa buraya route koy
-                    // Navigator.push(context, MaterialPageRoute(builder: (_) => NotificationDetailView(id: n.id)));
-                  },
-                  child: const Text("Detayı Gör"),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          GoogleMap(
-            initialCameraPosition: const CameraPosition(target: _initial, zoom: 15),
-            markers: _markers,
-            zoomControlsEnabled: false, // kendi butonlarımız var
-            myLocationButtonEnabled: false,
-            onMapCreated: (c) => _controller = c,
-          ),
-
-          // Zoom butonları
-          Positioned(
-            right: 12,
-            bottom: 120,
-            child: Column(
-              children: [
-                FloatingActionButton.small(
-                  heroTag: "zoomIn",
-                  onPressed: _zoomIn,
-                  child: const Icon(Icons.add),
-                ),
-                const SizedBox(height: 10),
-                FloatingActionButton.small(
-                  heroTag: "zoomOut",
-                  onPressed: _zoomOut,
-                  child: const Icon(Icons.remove),
-                ),
-              ],
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: onDetail,
+              child: const Text("Detayı Gör"),
+            )
+          ],
+        ),
       ),
     );
   }
 }
 
-class _TypeChip extends StatelessWidget {
-  final String type;
-  const _TypeChip({required this.type});
-
-  @override
-  Widget build(BuildContext context) {
-    final (text, color) = switch (type) {
-      "guvenlik" => ("GÜVENLİK", Colors.red),
-      "kayip" => ("KAYIP", Colors.orange),
-      "duyuru" => ("DUYURU", Colors.blue),
-      _ => ("DİĞER", Colors.purple),
-    };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.35)),
-      ),
-      child: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
-    );
-  }
-}
-
-class _MapNotification {
+class _MapNotif {
   final String id;
   final String title;
-  final String type; // guvenlik/kayip/duyuru
+  final String type;
   final DateTime createdAt;
   final LatLng position;
 
-  _MapNotification({
+  _MapNotif({
     required this.id,
     required this.title,
     required this.type,
