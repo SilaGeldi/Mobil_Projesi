@@ -17,7 +17,7 @@ class MapView extends StatefulWidget {
 class _MapViewState extends State<MapView> {
   final Completer<GoogleMapController> _controller = Completer();
 
-  // ✅ Kampüs konumu (Erzurum / Atatürk Üni örnek)
+  // ✅ Kampüs konumu (Erzurum / Atatürk Üni )
   static const LatLng campusLocation = LatLng(39.9009, 41.2640);
 
   // ✅ Filtre state
@@ -61,7 +61,7 @@ class _MapViewState extends State<MapView> {
       case "teknik_ariza":
         return BitmapDescriptor.hueViolet;   // mor
       case "guvenlik":
-        return BitmapDescriptor.hueRed;      // kırmızı
+        return BitmapDescriptor.hueYellow;      // kırmızı
       case "cevre":
         return BitmapDescriptor.hueCyan;     // turkuaz
       case "duyuru":
@@ -69,7 +69,7 @@ class _MapViewState extends State<MapView> {
       case "diger":
         return BitmapDescriptor.hueRose;     // pembe
       case "acil":
-        return BitmapDescriptor.hueYellow; // burada önemsiz; zaten filtreyle göstermiyoruz
+        return BitmapDescriptor.hueRed; // burada önemsiz; zaten filtreyle göstermiyoruz
       default:
         return BitmapDescriptor.hueAzure;    // bilinmeyenler
     }
