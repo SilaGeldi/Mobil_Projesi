@@ -13,6 +13,29 @@ import 'view_models/notification_view_model.dart';
 import 'views/auth/login_view.dart';
 import 'views/main/home_page.dart';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+// giriş yapan kullanıcı id’sini nereden alıyorsan ona göre çağıracağız
+Future<void> setupFCMForUser(String uid) async {
+  final messaging = FirebaseMessaging.instance;
+
+  // iOS/Android 13+ için izin
+  await messaging.requestPermission(alert: true, badge: true, sound: true);
+
+  // Token al
+  final token = await messaging.getToken();
+  if (token != null) {
+    await FirebaseFirestore.instance.collection('users').doc(uid).set(
+      {'fcmToken': token},
+      SetOptions(merge: true),
+    );
+  }
+
+  // En kolayı: topic
+  await messaging.subscribeToTopic('emergency');
+}
+
 // 🔥 TEST MODU — sadece sen kullanacaksın
 const bool testMode = false;
 const Widget testScreen = HomePage(); // Burayı istediğin sayfa yapabilirsin
