@@ -14,8 +14,7 @@ class AddNewNotificationPage extends StatefulWidget {
   const AddNewNotificationPage({super.key});
 
   @override
-  State<AddNewNotificationPage> createState() =>
-      _AddNewNotificationPageState();
+  State<AddNewNotificationPage> createState() => _AddNewNotificationPageState();
 }
 
 class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
@@ -67,12 +66,24 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
     }
 
     try {
-      final user = context.read<AuthViewModel>().currentUser!;
+      final authVM = context.read<AuthViewModel>();
+      final user = authVM.currentUser!;
+
+      final isAdmin = (user.role == "admin");
+
+      // ✅ Admin değilse acil seçilmesini engelle (garanti)
+      if (!isAdmin && selectedType == "acil") {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Acil duyuru sadece admin tarafından yayınlanabilir.")),
+        );
+        setState(() => selectedType = "duyuru");
+        return;
+      }
 
       final notif = NotificationModel(
         title: titleController.text.trim(),
         description: descController.text.trim(),
-        type: selectedType,
+        type: selectedType, // ✅ admin acil seçerse "acil" kaydolur
         status: defaultStatus,
         location: selectedLocation!,
         date: Timestamp.now(),
@@ -94,7 +105,7 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
                 Text("Bildiriminiz başarıyla eklendi!"),
               ],
             ),
-            backgroundColor: Colors.green.shade700,
+            backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 2),
           ),
@@ -126,6 +137,27 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
 
   @override
   Widget build(BuildContext context) {
+    final authVM = context.watch<AuthViewModel>();
+    final isAdmin = (authVM.currentUser?.role == "admin");
+
+    // ✅ Dropdown item listesi: admin ise acil ekle
+    final List<DropdownMenuItem<String>> typeItems = [
+      if (isAdmin)
+        const DropdownMenuItem(value: "acil", child: Text("Acil Duyuru")),
+      const DropdownMenuItem(value: "duyuru", child: Text("Duyuru")),
+      const DropdownMenuItem(value: "saglik", child: Text("Sağlık")),
+      const DropdownMenuItem(value: "kayip", child: Text("Kayıp")),
+      const DropdownMenuItem(value: "guvenlik", child: Text("Güvenlik")),
+      const DropdownMenuItem(value: "cevre", child: Text("Çevre")),
+      const DropdownMenuItem(value: "teknikAriza", child: Text("Teknik Arıza")),
+      const DropdownMenuItem(value: "diger", child: Text("Diğer")),
+    ];
+
+    // ✅ Admin değilken yanlışlıkla selectedType acil kalmışsa düzelt
+    if (!isAdmin && selectedType == "acil") {
+      selectedType = "duyuru";
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -142,7 +174,7 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
             formCard(
               child: TextField(
                 controller: titleController,
-                keyboardType: TextInputType.multiline, // Standart text yerine multiline daha esnektir
+                keyboardType: TextInputType.multiline,
                 enableSuggestions: true,
                 autocorrect: true,
                 decoration: const InputDecoration(
@@ -168,24 +200,19 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
               ),
             ),
 
-            // 🏷️ TÜR
+            // 🏷️ TÜR (admin ise acil görür)
             formCard(
-              child: DropdownButtonFormField(
+              child: DropdownButtonFormField<String>(
                 value: selectedType,
                 decoration: const InputDecoration(
                   labelText: "Bildirim Türü",
                   border: InputBorder.none,
                 ),
-                items: const [
-                  DropdownMenuItem(value: "duyuru", child: Text("Duyuru")),
-                  DropdownMenuItem(value: "saglik", child: Text("Sağlık")),
-                  DropdownMenuItem(value: "kayip", child: Text("Kayıp")),
-                  DropdownMenuItem(value: "guvenlik", child: Text("Güvenlik")),
-                  DropdownMenuItem(value: "cevre", child: Text("Çevre")),
-                  DropdownMenuItem(value: "teknikAriza", child: Text("Teknik Arıza")),
-                  DropdownMenuItem(value: "diger", child: Text("Diğer")),
-                ],
-                onChanged: (v) => setState(() => selectedType = v!),
+                items: typeItems,
+                onChanged: (v) {
+                  if (v == null) return;
+                  setState(() => selectedType = v);
+                },
               ),
             ),
 
@@ -219,7 +246,6 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: GoogleMap(
-                        // 🔥 HARİTA HAREKETİNİ DÜZELTEN KISIM
                         gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
                           Factory<OneSequenceGestureRecognizer>(
                                 () => EagerGestureRecognizer(),
@@ -271,7 +297,7 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
               child: ElevatedButton(
                 onPressed: saveNotification,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0D47A1), // 🔥 Koyu Mavi
+                  backgroundColor: const Color(0xFF0D47A1),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
