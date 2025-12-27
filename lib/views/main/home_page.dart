@@ -19,7 +19,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String searchQuery = "";
   String? selectedStatus;
-  String? selectedType; // 🔥 artık gerçek type değeri tutuyor: "saglik", "kayip", ...
+  String? selectedType; // ✅ normalize edilmiş değer tutuyor: "saglik", "teknikariza", ...
   bool showOnlyFollowed = false;
 
   String capitalize(String name) {
@@ -30,6 +30,25 @@ class _HomePageState extends State<HomePage> {
     }).join(' ');
   }
 
+  /// ✅ Tipi tek standarda indirger (en önemli kısım)
+  /// Örnek:
+  /// "Teknik Arıza" -> "teknikariza"
+  /// "teknik_ariza" -> "teknikariza"
+  /// "teknikAriza" -> "teknikariza"
+  /// "Sağlık" -> "saglik"
+  String _normType(String t) {
+    final lower = t.toLowerCase().trim();
+    return lower
+        .replaceAll(' ', '')
+        .replaceAll('_', '')
+        .replaceAll('ı', 'i')
+        .replaceAll('ğ', 'g')
+        .replaceAll('ş', 's')
+        .replaceAll('ö', 'o')
+        .replaceAll('ü', 'u')
+        .replaceAll('ç', 'c');
+  }
+
   @override
   Widget build(BuildContext context) {
     final notifVM = Provider.of<NotificationViewModel>(context);
@@ -37,135 +56,15 @@ class _HomePageState extends State<HomePage> {
     final user = authVM.currentUser;
     final userName = capitalize(user?.name ?? "Kullanıcı");
 
-    // 🔥 Filtreleme
     final filteredNotifications = notifVM.notifications.where((n) {
-      final typeLower = n.type.toLowerCase();
+      final nType = _normType(n.type);
 
-      // 1) Kullanıcı Tercihleri (senin eski kodunu bozmadan daha toleranslı yaptım)
+      // 1) Kullanıcı tercihleri
       if (user != null) {
-        // Sağlık tercih kontrolü: "sağlık" veya "saglik" gelirse
-        if ((typeLower == 'sağlık' || typeLower == 'saglik') &&
-            !(user.preferences['health'] ?? true)) return false;
+        final isHealth = (nType == "saglik");
+        final isTechnical = (nType == "teknikariza");
 
-        // Teknik tercih kontrolü: "teknik" / "teknikariza" / "teknik_ariza" / "teknikariza" / "teknikariza"
-        final isTechnical = typeLower == 'teknik' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknik_ariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknik ariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknik arıza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikariza' ||
-            typeLower == 'teknikAriza'.toLowerCase();
-
+        if (isHealth && !(user.preferences['health'] ?? true)) return false;
         if (isTechnical && !(user.preferences['technical'] ?? true)) return false;
       }
 
@@ -175,27 +74,26 @@ class _HomePageState extends State<HomePage> {
       }
 
       // 3) Arama
+      final q = searchQuery.toLowerCase();
       final matchesSearch =
-          n.title.toLowerCase().contains(searchQuery.toLowerCase()) ||
-              n.description.toLowerCase().contains(searchQuery.toLowerCase());
+          n.title.toLowerCase().contains(q) ||
+              n.description.toLowerCase().contains(q);
 
       // 4) Durum / Tür
       final matchesStatus =
           selectedStatus == null || n.status.toLowerCase() == selectedStatus!;
       final matchesType =
-          selectedType == null || typeLower == selectedType!;
+          selectedType == null || nType == selectedType!;
 
       return matchesSearch && matchesStatus && matchesType;
     }).toList();
 
-    // ✅ ACİL duyuruları ayır
-    final emergencyNotifs = filteredNotifications
-        .where((n) => n.type.toLowerCase() == "acil")
-        .toList();
+    // ✅ ACİL duyurular ayrı
+    final emergencyNotifs =
+    filteredNotifications.where((n) => _normType(n.type) == "acil").toList();
 
-    final normalNotifs = filteredNotifications
-        .where((n) => n.type.toLowerCase() != "acil")
-        .toList();
+    final normalNotifs =
+    filteredNotifications.where((n) => _normType(n.type) != "acil").toList();
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -259,7 +157,7 @@ class _HomePageState extends State<HomePage> {
                   ? const Center(child: Text("Sonuç bulunamadı", style: TextStyle(color: Colors.grey)))
                   : ListView(
                 children: [
-                  // 🔴 ACİL DUYURULAR BLOĞU (en üstte)
+                  // 🔴 ACİL DUYURULAR
                   if (emergencyNotifs.isNotEmpty) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -382,7 +280,7 @@ class _HomePageState extends State<HomePage> {
                       {"label": "Güvenlik", "value": "guvenlik"},
                       {"label": "Duyuru", "value": "duyuru"},
                       {"label": "Çevre", "value": "cevre"},
-                      {"label": "Teknik Arıza", "value": "teknikariza"}, // eğer sende "teknikAriza" ise altta normalize ediyoruz
+                      {"label": "Teknik Arıza", "value": "teknikariza"},
                       {"label": "Diğer", "value": "diger"},
                     ].map((t) {
                       final v = t["value"]!;
@@ -424,7 +322,7 @@ class _HomePageState extends State<HomePage> {
     final notifVM = Provider.of<NotificationViewModel>(context, listen: false);
     final isFollowing = userId != null && notif.followers.contains(userId);
 
-    final isEmergency = forceEmergencyStyle || notif.type.toLowerCase() == "acil";
+    final isEmergency = forceEmergencyStyle || _normType(notif.type) == "acil";
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -503,9 +401,8 @@ class _HomePageState extends State<HomePage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  notif.type,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                ),
+                    notif.type,
+                    style: const TextStyle(color: Colors.white, fontSize: 12)),
               ),
             ],
           ),
