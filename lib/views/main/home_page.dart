@@ -1,6 +1,8 @@
+import 'dart:convert'; // ✅ Map’i JSON’a çevirmek için
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../view_models/notification_view_model.dart';
 import '../../view_models/auth_view_model.dart';
@@ -21,9 +23,26 @@ class _HomePageState extends State<HomePage> {
   String? selectedType;   // ✅ normalize edilmiş: "kayip" / "teknikariza" / ...
   bool showOnlyFollowed = false;
 
-  bool _emergencySnackShown = false; // ✅ acil uyarı 1 kere
-  final Map<String, String> _followedLastStatus = {}; // ✅ takip edilenlerde status değişimini yakalamak için
-  final Set<String> _shownStatusChangeKeys = {}; // ✅ aynı değişimi tekrar snack yapmasın
+  // ✅ Acil snack: her girişte bir kere gösterilecek
+  bool _emergencySnackShown = false;
+
+  // ✅ Takip edilen bildirimlerin en son görülen status’ları (telefon hafızasından okunacak)
+  Map<String, String> _lastSeenFollowedStatus = {};
+
+  // ✅ Aynı giriş sırasında aynı değişimi 2 kere göstermesin
+  final Set<String> _shownStatusChangeKeysThisSession = {};
+
+  // ✅ Kullanıcı değişti mi diye takip (logout/login olduğunda reset atacağız)
+  String? _lastUserId;
+
+  // ✅ Prefs yükleme tamam mı (yüklenmeden karşılaştırma yapmayalım)
+  bool _prefsLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // initState’te userId daha gelmemiş olabilir; userId build’de gelince yükleyeceğiz.
+  }
 
   String capitalize(String name) {
     if (name.isEmpty) return name;
@@ -33,7 +52,7 @@ class _HomePageState extends State<HomePage> {
     }).join(' ');
   }
 
-  /// ✅ TEK NORMALİZASYON (Home + Map aynı mantık)
+  /// ✅ TEK NORMALİZASYON (Home + Map aynı)
   /// - boşluk/underscore siler
   /// - Türkçe karakterleri düzleştirir
   /// Örn: "Teknik Arıza" / "teknik_ariza" / "teknikAriza" => "teknikariza"
@@ -65,36 +84,66 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  /// ✅ Görev: Takip edilen bildirimin durumu değişince uyarı göster
-  void _checkFollowedStatusChanges({
-    required List<NotificationModel> all,
-    required String? myUid,
-  }) {
-    if (myUid == null) return;
+  /// ✅ SharedPreferences KEY (user bazlı)
+  String _prefsKeyForUser(String uid) => "followed_last_status_$uid";
 
-    final followed = all.where((n) => n.followers.contains(myUid) && n.notifId != null).toList();
+  /// ✅ Telefona kaydedilmiş takip-status map’ini yükle
+  Future<void> _loadLastSeenFollowedStatus(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_prefsKeyForUser(uid));
+
+    if (raw == null || raw.isEmpty) {
+      _lastSeenFollowedStatus = {};
+    } else {
+      try {
+        final decoded = jsonDecode(raw) as Map<String, dynamic>;
+        _lastSeenFollowedStatus = decoded.map((k, v) => MapEntry(k, v.toString()));
+      } catch (_) {
+        _lastSeenFollowedStatus = {};
+      }
+    }
+
+    _prefsLoaded = true;
+  }
+
+  /// ✅ Güncel takip-status map’ini telefona kaydet
+  Future<void> _saveLastSeenFollowedStatus(String uid, Map<String, String> map) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsKeyForUser(uid), jsonEncode(map));
+  }
+
+  /// ✅ Görev: Takip edilen bildirimin durumu değişince (girişte) uyarı göster
+  Future<void> _checkFollowedStatusChangesOnLogin({
+    required List<NotificationModel> all,
+    required String uid,
+  }) async {
+    // Prefs yüklenmeden kıyas yapma
+    if (!_prefsLoaded) return;
+
+    // Takip edilen bildirimleri bul
+    final followed = all.where((n) => n.notifId != null && n.followers.contains(uid)).toList();
+
+    // Şu anki status snapshot’ı (kaydedilecek)
+    final Map<String, String> currentSnapshot = {};
 
     for (final n in followed) {
       final id = n.notifId!;
       final newSt = _normStatus(n.status);
-      final oldSt = _followedLastStatus[id];
 
-      // ilk kez görüyorsak map'e yaz
-      if (oldSt == null) {
-        _followedLastStatus[id] = newSt;
-        continue;
-      }
+      currentSnapshot[id] = newSt;
 
-      // status değiştiyse snack
+      final oldSt = _lastSeenFollowedStatus[id];
+
+      // İlk kez görüyorsa: sadece kayda al (snack yok)
+      if (oldSt == null) continue;
+
+      // Değiştiyse: girişte snack göster
       if (oldSt != newSt) {
         final key = "$id:$oldSt->$newSt";
-        if (_shownStatusChangeKeys.contains(key)) {
-          _followedLastStatus[id] = newSt;
-          continue;
-        }
 
-        _shownStatusChangeKeys.add(key);
-        _followedLastStatus[id] = newSt;
+        // Aynı girişte 2 kere çıkmasın
+        if (_shownStatusChangeKeysThisSession.contains(key)) continue;
+        _shownStatusChangeKeysThisSession.add(key);
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _showSnack(
@@ -104,6 +153,28 @@ class _HomePageState extends State<HomePage> {
         });
       }
     }
+
+    // ✅ Giriş sonrası “son görülen” olarak güncel snapshot’ı kaydet
+    await _saveLastSeenFollowedStatus(uid, currentSnapshot);
+
+    // RAM’deki map’i de güncelle (bir sonraki kıyas için)
+    _lastSeenFollowedStatus = currentSnapshot;
+  }
+
+  /// ✅ Kullanıcı değişince (logout/login) state reset + prefs yükle
+  Future<void> _handleUserChanged(String uid) async {
+    _lastUserId = uid;
+
+    // ✅ Her girişte acil snack yeniden gösterilebilir olsun
+    _emergencySnackShown = false;
+
+    // ✅ Bu girişte gösterilen “status-change” kayıtlarını temizle
+    _shownStatusChangeKeysThisSession.clear();
+
+    // ✅ Prefs yeniden yükle
+    _prefsLoaded = false;
+    _lastSeenFollowedStatus = {};
+    await _loadLastSeenFollowedStatus(uid);
   }
 
   @override
@@ -111,12 +182,21 @@ class _HomePageState extends State<HomePage> {
     final notifVM = context.watch<NotificationViewModel>();
     final authVM = context.watch<AuthViewModel>();
     final user = authVM.currentUser;
-    final userName = capitalize(user?.name ?? "Kullanıcı");
     final myUid = user?.uid;
+    final userName = capitalize(user?.name ?? "Kullanıcı");
 
-    // ✅ takip edilenlerde status değişimi kontrolü (real-time liste güncellenince otomatik çalışır)
-    _checkFollowedStatusChanges(all: notifVM.notifications, myUid: myUid);
+    // ✅ Kullanıcı değiştiyse: reset + prefs yükle
+    if (myUid != null && myUid != _lastUserId) {
+      // build içinde async çağrı: post frame ile
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        await _handleUserChanged(myUid);
+        // Prefs yüklendi; giriş kontrolü bir sonraki frame’de yapılacak
+        setState(() {});
+      });
+    }
 
+    // Filtreleme
     final filteredNotifications = notifVM.notifications.where((n) {
       final nType = _norm(n.type);
 
@@ -153,11 +233,19 @@ class _HomePageState extends State<HomePage> {
     final emergencyNotifs = filteredNotifications.where((n) => _norm(n.type) == "acil").toList();
     final normalNotifs = filteredNotifications.where((n) => _norm(n.type) != "acil").toList();
 
-    // ✅ Görev-1: kullanıcı giriş yaptıktan sonra acil duyuru varsa 1 kere uyar
-    if (emergencyNotifs.isNotEmpty && !_emergencySnackShown) {
+    // ✅ Görev-1: kullanıcı giriş yaptıktan sonra acil duyuru varsa HER GİRİŞTE 1 kere uyar
+    if (myUid != null && emergencyNotifs.isNotEmpty && !_emergencySnackShown) {
       _emergencySnackShown = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _showSnack("⚠️ ACİL duyurunuz var! Lütfen kontrol edin.", color: Colors.red.shade700);
+      });
+    }
+
+    // ✅ Görev-SON: takip edilen bildirim status değişimini girişte kontrol et
+    if (myUid != null && _prefsLoaded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        await _checkFollowedStatusChangesOnLogin(all: notifVM.notifications, uid: myUid);
       });
     }
 
