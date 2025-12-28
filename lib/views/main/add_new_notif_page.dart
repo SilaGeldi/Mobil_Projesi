@@ -1,46 +1,52 @@
-import 'package:flutter/foundation.dart'; // 🔥 Harita hareketi için gerekli
-import 'package:flutter/gestures.dart';    // 🔥 Harita hareketi için gerekli
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
 
+import '../../models/notification_model.dart';
 import '../../view_models/notification_view_model.dart';
 import '../../view_models/auth_view_model.dart';
-import '../../models/notification_model.dart';
 
 class AddNewNotificationPage extends StatefulWidget {
-  const AddNewNotificationPage({super.key});
+  final bool isEmergency;
+  const AddNewNotificationPage({super.key, this.isEmergency = false});
 
   @override
-  State<AddNewNotificationPage> createState() =>
-      _AddNewNotificationPageState();
+  State<AddNewNotificationPage> createState() => _AddNewNotificationPageState();
 }
 
 class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
   final titleController = TextEditingController();
   final descController = TextEditingController();
 
-  String selectedType = "duyuru";
-  final String defaultStatus = "inceleniyor";
+  String selectedType = "sağlık";
+  String defaultStatus = "inceleniyor";
 
   // 📍 KONUM
   GeoPoint? selectedLocation;
   bool loadingLocation = false;
   bool locationFromDevice = false;
 
-  // 🏫 Atatürk Üniversitesi Kampüs Konumu
+  // 🏫 Kampüs başlangıç konumu (Atatürk Üniversitesi)
   static const LatLng campusLocation = LatLng(39.9009, 41.2640);
   late LatLng mapCenter = campusLocation;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isEmergency) {
+      selectedType = "acil";
+      defaultStatus = "açık"; // acil yayınlanınca “açık” daha mantıklı
+    }
+  }
 
   // 📱 Cihaz konumu al
   Future<void> useDeviceLocation() async {
     setState(() => loadingLocation = true);
 
     final permission = await Geolocator.requestPermission();
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
+    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
       setState(() => loadingLocation = false);
       return;
     }
@@ -55,69 +61,52 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
     });
   }
 
-  // 💾 BİLDİRİM KAYDET VE ONAY MESAJI
   Future<void> saveNotification() async {
-    if (titleController.text.isEmpty ||
-        descController.text.isEmpty ||
-        selectedLocation == null) {
+    if (titleController.text.isEmpty || descController.text.isEmpty || selectedLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Tüm alanları doldurun")),
       );
       return;
     }
 
-    try {
-      final user = context.read<AuthViewModel>().currentUser!;
+    final authVM = context.read<AuthViewModel>();
+    final user = authVM.currentUser!;
+    final isAdmin = (user.role == "admin");
 
-      final notif = NotificationModel(
-        title: titleController.text.trim(),
-        description: descController.text.trim(),
-        type: selectedType,
-        status: defaultStatus,
-        location: selectedLocation!,
-        date: Timestamp.now(),
-        createdBy: user.uid,
-        createdByName: user.name,
-        followers: [],
+    // Admin değilse acil seçemesin (garanti)
+    if (!isAdmin && selectedType == "acil") {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Acil duyuru sadece admin tarafından yayınlanabilir.")),
       );
-
-      await context.read<NotificationViewModel>().addNotification(notif);
-
-      // ✅ BAŞARI MESAJI (SnackBar)
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 10),
-                Text("Bildiriminiz başarıyla eklendi!"),
-              ],
-            ),
-            backgroundColor: Colors.green.shade700,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-        Navigator.pop(context); // İşlem başarılıysa geri dön
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Bir hata oluştu: $e"), backgroundColor: Colors.red),
-        );
-      }
+      return;
     }
+
+    // isEmergency sayfasıysa zorla acil
+    final finalType = widget.isEmergency ? "acil" : selectedType;
+
+    final notif = NotificationModel(
+      title: titleController.text.trim(),
+      description: descController.text.trim(),
+      type: finalType,
+      status: widget.isEmergency ? "açık" : defaultStatus,
+      location: selectedLocation!,
+      date: Timestamp.now(),
+      createdBy: user.uid,
+      createdByName: user.name,
+      followers: [],
+    );
+
+    await context.read<NotificationViewModel>().addNotification(notif);
+
+    Navigator.pop(context);
   }
 
-  // 🔲 Ortak Form Kartı
   Widget formCard({required Widget child}) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.grey.shade300),
       ),
       child: child,
@@ -126,70 +115,107 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
 
   @override
   Widget build(BuildContext context) {
+    final authVM = Provider.of<AuthViewModel>(context);
+    final user = authVM.currentUser;
+    final isAdmin = (user?.role == "admin");
+
+    // Tip listesi: admin ise acil görür, user görmez
+    final List<Map<String, String>> typeItems = [
+      {"value": "sağlık", "label": "Sağlık"},
+      {"value": "kayıp", "label": "Kayıp"},
+      {"value": "güvenlik", "label": "Güvenlik"},
+      {"value": "duyuru", "label": "Duyuru"},
+      {"value": "çevre", "label": "Çevre"},
+      {"value": "teknikariza", "label": "Teknik Arıza"},
+      {"value": "diğer", "label": "Diğer"},
+    ];
+
+    if (isAdmin) {
+      typeItems.insert(0, {"value": "acil", "label": "Acil Duyuru"});
+    }
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
-        title: const Text("Yeni Bildirim", style: TextStyle(color: Colors.black)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black),
+        title: Text(widget.isEmergency ? "Yeni Acil Duyuru" : "Yeni Bildirim"),
+        backgroundColor: widget.isEmergency ? Colors.red.shade700 : const Color(0xFF0D47A1),
+        foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // 🧾 BAŞLIK
+            // Başlık
             formCard(
               child: TextField(
                 controller: titleController,
-                keyboardType: TextInputType.multiline, // Standart text yerine multiline daha esnektir
-                enableSuggestions: true,
-                autocorrect: true,
                 decoration: const InputDecoration(
                   labelText: "Bildirim Başlığı",
-                  border: InputBorder.none,
+                  border: OutlineInputBorder(),
                 ),
               ),
             ),
+            const SizedBox(height: 12),
 
-            // 📝 AÇIKLAMA
+            // Açıklama
             formCard(
               child: TextField(
                 controller: descController,
-                minLines: 4,
-                maxLines: 6,
-                keyboardType: TextInputType.multiline,
-                enableSuggestions: true,
-                autocorrect: true,
+                maxLines: 4,
                 decoration: const InputDecoration(
                   labelText: "Açıklama",
-                  border: InputBorder.none,
+                  border: OutlineInputBorder(),
                 ),
               ),
             ),
+            const SizedBox(height: 12),
 
-            // 🏷️ TÜR
+            // Tür (Acil sayfasında kilit)
             formCard(
-              child: DropdownButtonFormField(
+              child: DropdownButtonFormField<String>(
                 value: selectedType,
                 decoration: const InputDecoration(
                   labelText: "Bildirim Türü",
-                  border: InputBorder.none,
+                  border: OutlineInputBorder(),
                 ),
-                items: const [
-                  DropdownMenuItem(value: "duyuru", child: Text("Duyuru")),
-                  DropdownMenuItem(value: "saglik", child: Text("Sağlık")),
-                  DropdownMenuItem(value: "kayip", child: Text("Kayıp")),
-                  DropdownMenuItem(value: "guvenlik", child: Text("Güvenlik")),
-                  DropdownMenuItem(value: "cevre", child: Text("Çevre")),
-                  DropdownMenuItem(value: "teknikAriza", child: Text("Teknik Arıza")),
-                  DropdownMenuItem(value: "diger", child: Text("Diğer")),
-                ],
-                onChanged: (v) => setState(() => selectedType = v!),
+                items: typeItems
+                    .map((m) => DropdownMenuItem<String>(
+                  value: m["value"]!,
+                  child: Text(m["label"]!),
+                ))
+                    .toList(),
+                onChanged: widget.isEmergency
+                    ? null
+                    : (val) {
+                  if (val == null) return;
+                  setState(() => selectedType = val);
+                },
               ),
             ),
+            const SizedBox(height: 12),
 
-            // 📍 KONUM
+            // Durum (Acilde otomatik açık)
+            formCard(
+              child: DropdownButtonFormField<String>(
+                value: widget.isEmergency ? "açık" : defaultStatus,
+                decoration: const InputDecoration(
+                  labelText: "Durum",
+                  border: OutlineInputBorder(),
+                ),
+                items: const ["açık", "inceleniyor", "çözüldü"]
+                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                    .toList(),
+                onChanged: widget.isEmergency
+                    ? null
+                    : (val) {
+                  if (val == null) return;
+                  setState(() => defaultStatus = val);
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // 📍 KONUM + HARİTA
             formCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,85 +230,57 @@ class _AddNewNotificationPageState extends State<AddNewNotificationPage> {
                           ? "Cihaz konumu alındı ✓"
                           : "Cihaz konumunu kullan",
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      elevation: 0,
-                      side: const BorderSide(color: Colors.grey),
-                    ),
                   ),
                   const SizedBox(height: 12),
 
-                  // 🗺️ HARİTA
                   SizedBox(
-                    height: 250,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: GoogleMap(
-                        // 🔥 HARİTA HAREKETİNİ DÜZELTEN KISIM
-                        gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-                          Factory<OneSequenceGestureRecognizer>(
-                                () => EagerGestureRecognizer(),
-                          ),
-                        },
-                        initialCameraPosition: CameraPosition(
-                          target: mapCenter,
-                          zoom: 16,
-                        ),
-                        myLocationEnabled: true,
-                        myLocationButtonEnabled: false,
-                        onCameraMove: (pos) {
-                          mapCenter = pos.target;
-                        },
-                        onCameraIdle: () {
-                          setState(() {
-                            selectedLocation = GeoPoint(
-                              mapCenter.latitude,
-                              mapCenter.longitude,
-                            );
-                          });
-                        },
-                        markers: {
-                          Marker(
-                            markerId: const MarkerId("selected"),
-                            position: mapCenter,
-                          ),
-                        },
+                    height: 220,
+                    child: GoogleMap(
+                      initialCameraPosition: CameraPosition(
+                        target: mapCenter,
+                        zoom: 16,
                       ),
+                      myLocationEnabled: true,
+                      myLocationButtonEnabled: false,
+                      onCameraMove: (pos) {
+                        mapCenter = pos.target;
+                      },
+                      onCameraIdle: () {
+                        setState(() {
+                          selectedLocation = GeoPoint(
+                            mapCenter.latitude,
+                            mapCenter.longitude,
+                          );
+                        });
+                      },
+                      markers: {
+                        Marker(
+                          markerId: const MarkerId("selected"),
+                          position: mapCenter,
+                        ),
+                      },
                     ),
                   ),
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8.0),
-                    child: Text(
-                      "* Haritayı kaydırarak konumu belirleyebilirsiniz.",
-                      style: TextStyle(fontSize: 11, color: Colors.grey),
-                    ),
-                  )
                 ],
               ),
             ),
+            const SizedBox(height: 16),
 
-            const SizedBox(height: 20),
-
-            // 💾 KAYDET BUTONU
             SizedBox(
               width: double.infinity,
-              height: 55,
+              height: 50,
               child: ElevatedButton(
-                onPressed: saveNotification,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0D47A1), // 🔥 Koyu Mavi
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  backgroundColor: widget.isEmergency ? Colors.red.shade700 : Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text(
-                  "Bildirim Oluştur",
-                  style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
+                onPressed: saveNotification,
+                child: Text(
+                  widget.isEmergency ? "ACİL DUYURU YAYINLA" : "Bildirim Oluştur",
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
-            const SizedBox(height: 30),
           ],
         ),
       ),

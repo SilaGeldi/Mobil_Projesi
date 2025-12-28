@@ -19,8 +19,8 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String searchQuery = "";
   String? selectedStatus;
-  String? selectedType;
-  bool showOnlyFollowed = false; // 🔥 Takip edilenler filtresi için değişken
+  String? selectedType; // ✅ normalize edilmiş değer tutuyor: "saglik", "teknikariza", ...
+  bool showOnlyFollowed = false;
 
   String capitalize(String name) {
     if (name.isEmpty) return name;
@@ -28,6 +28,25 @@ class _HomePageState extends State<HomePage> {
       if (str.isEmpty) return str;
       return str[0].toUpperCase() + str.substring(1).toLowerCase();
     }).join(' ');
+  }
+
+  /// ✅ Tipi tek standarda indirger (en önemli kısım)
+  /// Örnek:
+  /// "Teknik Arıza" -> "teknikariza"
+  /// "teknik_ariza" -> "teknikariza"
+  /// "teknikAriza" -> "teknikariza"
+  /// "Sağlık" -> "saglik"
+  String _normType(String t) {
+    final lower = t.toLowerCase().trim();
+    return lower
+        .replaceAll(' ', '')
+        .replaceAll('_', '')
+        .replaceAll('ı', 'i')
+        .replaceAll('ğ', 'g')
+        .replaceAll('ş', 's')
+        .replaceAll('ö', 'o')
+        .replaceAll('ü', 'u')
+        .replaceAll('ç', 'c');
   }
 
   @override
@@ -38,27 +57,43 @@ class _HomePageState extends State<HomePage> {
     final userName = capitalize(user?.name ?? "Kullanıcı");
 
     final filteredNotifications = notifVM.notifications.where((n) {
-      // 1. Kullanıcı Tercihleri
+      final nType = _normType(n.type);
+
+      // 1) Kullanıcı tercihleri
       if (user != null) {
-        if (n.type == 'sağlık' && !(user.preferences['health'] ?? true)) return false;
-        if (n.type == 'teknik' && !(user.preferences['technical'] ?? true)) return false;
+        final isHealth = (nType == "saglik");
+        final isTechnical = (nType == "teknikariza");
+
+        if (isHealth && !(user.preferences['health'] ?? true)) return false;
+        if (isTechnical && !(user.preferences['technical'] ?? true)) return false;
       }
 
-      // 2. Takip Edilenler Filtresi
+      // 2) Takip edilenler filtresi
       if (showOnlyFollowed && user != null) {
         if (!n.followers.contains(user.uid)) return false;
       }
 
-      // 3. Arama Sorgusu
-      final matchesSearch = n.title.toLowerCase().contains(searchQuery.toLowerCase()) ||
-          n.description.toLowerCase().contains(searchQuery.toLowerCase());
+      // 3) Arama
+      final q = searchQuery.toLowerCase();
+      final matchesSearch =
+          n.title.toLowerCase().contains(q) ||
+              n.description.toLowerCase().contains(q);
 
-      // 4. Durum ve Tür Filtresi
-      final matchesStatus = selectedStatus == null || n.status == selectedStatus;
-      final matchesType = selectedType == null || n.type == selectedType;
+      // 4) Durum / Tür
+      final matchesStatus =
+          selectedStatus == null || n.status.toLowerCase() == selectedStatus!;
+      final matchesType =
+          selectedType == null || nType == selectedType!;
 
       return matchesSearch && matchesStatus && matchesType;
     }).toList();
+
+    // ✅ ACİL duyurular ayrı
+    final emergencyNotifs =
+    filteredNotifications.where((n) => _normType(n.type) == "acil").toList();
+
+    final normalNotifs =
+    filteredNotifications.where((n) => _normType(n.type) != "acil").toList();
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -70,7 +105,10 @@ class _HomePageState extends State<HomePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text("Hoşgeldin,", style: TextStyle(fontSize: 14, color: Colors.grey)),
-            Text(userName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
+            Text(
+              userName,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+            ),
           ],
         ),
       ),
@@ -89,7 +127,10 @@ class _HomePageState extends State<HomePage> {
                       hintText: "Bildirimlerde ara...",
                       filled: true,
                       fillColor: Colors.grey.shade200,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
                   ),
                 ),
@@ -99,11 +140,10 @@ class _HomePageState extends State<HomePage> {
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      // Eğer bir filtre aktifse buton rengini değiştirerek kullanıcıya belirtiyoruz
-                        color: (selectedStatus != null || selectedType != null || showOnlyFollowed)
-                            ? Colors.blueAccent
-                            : Colors.black,
-                        borderRadius: BorderRadius.circular(12)
+                      color: (selectedStatus != null || selectedType != null || showOnlyFollowed)
+                          ? Colors.blueAccent
+                          : Colors.black,
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(Icons.filter_list, color: Colors.white),
                   ),
@@ -111,30 +151,72 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
             const SizedBox(height: 16),
+
             Expanded(
-              child: filteredNotifications.isEmpty
+              child: (emergencyNotifs.isEmpty && normalNotifs.isEmpty)
                   ? const Center(child: Text("Sonuç bulunamadı", style: TextStyle(color: Colors.grey)))
-                  : ListView.builder(
-                itemCount: filteredNotifications.length,
-                itemBuilder: (context, index) {
-                  final notif = filteredNotifications[index];
-                  return GestureDetector(
+                  : ListView(
+                children: [
+                  // 🔴 ACİL DUYURULAR
+                  if (emergencyNotifs.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade700,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.warning_amber, color: Colors.white),
+                          SizedBox(width: 8),
+                          Text(
+                            "ACİL DUYURULAR",
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ...emergencyNotifs.map((notif) => GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => NotificationDetailPage(notification: notif),
+                        ),
+                      ),
+                      child: _buildNotificationCard(
+                        context,
+                        notif,
+                        user?.uid,
+                        forceEmergencyStyle: true,
+                      ),
+                    )),
+                    const SizedBox(height: 8),
+                  ],
+
+                  // 🟦 NORMAL LİSTE
+                  ...normalNotifs.map((notif) => GestureDetector(
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => NotificationDetailPage(notification: notif)),
+                      MaterialPageRoute(
+                        builder: (_) => NotificationDetailPage(notification: notif),
+                      ),
                     ),
                     child: _buildNotificationCard(context, notif, user?.uid),
-                  );
-                },
+                  )),
+                ],
               ),
             ),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFF0D47A1), // 🔥 Koyu Mavi FAB
+        backgroundColor: const Color(0xFF0D47A1),
         child: const Icon(Icons.add, color: Colors.white),
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddNewNotificationPage())),
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AddNewNotificationPage()),
+        ),
       ),
     );
   }
@@ -142,7 +224,9 @@ class _HomePageState extends State<HomePage> {
   void _showFilterBottomSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) {
         return StatefulBuilder(builder: (context, setModalState) {
           return Padding(
@@ -155,7 +239,6 @@ class _HomePageState extends State<HomePage> {
                   const Text("Filtrele", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 20),
 
-                  // 🔥 TAKİP EDİLENLER BUTONU (Switch/Chip formunda)
                   const Text("Özel Filtre", style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   FilterChip(
@@ -184,22 +267,34 @@ class _HomePageState extends State<HomePage> {
                       );
                     }).toList(),
                   ),
+
                   const SizedBox(height: 15),
                   const Text("Tür", style: TextStyle(fontWeight: FontWeight.bold)),
                   Wrap(
                     spacing: 8,
                     runSpacing: 4,
-                    children: ["Sağlık", "Kayıp", "Güvenlik", "Duyuru", "Çevre", "Teknik Arıza", "Diğer"].map((t) {
+                    children: const [
+                      {"label": "Acil Duyuru", "value": "acil"},
+                      {"label": "Sağlık", "value": "saglik"},
+                      {"label": "Kayıp", "value": "kayip"},
+                      {"label": "Güvenlik", "value": "guvenlik"},
+                      {"label": "Duyuru", "value": "duyuru"},
+                      {"label": "Çevre", "value": "cevre"},
+                      {"label": "Teknik Arıza", "value": "teknikariza"},
+                      {"label": "Diğer", "value": "diger"},
+                    ].map((t) {
+                      final v = t["value"]!;
                       return ChoiceChip(
-                        label: Text(t),
-                        selected: selectedType == t,
+                        label: Text(t["label"]!),
+                        selected: selectedType == v,
                         onSelected: (val) => setState(() {
-                          selectedType = val ? t : null;
+                          selectedType = val ? v : null;
                           setModalState(() {});
                         }),
                       );
                     }).toList(),
                   ),
+
                   const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
@@ -208,7 +303,7 @@ class _HomePageState extends State<HomePage> {
                       onPressed: () => Navigator.pop(context),
                       child: const Text("Uygula", style: TextStyle(color: Colors.white)),
                     ),
-                  )
+                  ),
                 ],
               ),
             ),
@@ -218,26 +313,58 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildNotificationCard(BuildContext context, NotificationModel notif, String? userId) {
+  Widget _buildNotificationCard(
+      BuildContext context,
+      NotificationModel notif,
+      String? userId, {
+        bool forceEmergencyStyle = false,
+      }) {
     final notifVM = Provider.of<NotificationViewModel>(context, listen: false);
     final isFollowing = userId != null && notif.followers.contains(userId);
+
+    final isEmergency = forceEmergencyStyle || _normType(notif.type) == "acil";
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: isEmergency ? Colors.red.shade50 : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: isEmergency ? Colors.red.shade200 : Colors.grey.shade300),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (isEmergency)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber, color: Colors.red.shade700, size: 18),
+                  const SizedBox(width: 6),
+                  Text(
+                    "ACİL DUYURU",
+                    style: TextStyle(
+                      color: Colors.red.shade700,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                child: Text(notif.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                child: Text(
+                  notif.title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: isEmergency ? Colors.red.shade900 : Colors.black,
+                  ),
+                ),
               ),
               IconButton(
                 padding: EdgeInsets.zero,
@@ -270,10 +397,12 @@ class _HomePageState extends State<HomePage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                    color: Colors.blue.shade400, // 🔥 Daha yumuşak mavi rengi
-                    borderRadius: BorderRadius.circular(8)
+                  color: isEmergency ? Colors.red.shade700 : Colors.blue.shade400,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(notif.type, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                child: Text(
+                    notif.type,
+                    style: const TextStyle(color: Colors.white, fontSize: 12)),
               ),
             ],
           ),
@@ -284,10 +413,14 @@ class _HomePageState extends State<HomePage> {
 
   Color _statusColor(String status) {
     switch (status.toLowerCase()) {
-      case "açık": return Colors.green;
-      case "inceleniyor": return Colors.orange;
-      case "çözüldü": return Colors.grey;
-      default: return Colors.blueGrey;
+      case "açık":
+        return Colors.green;
+      case "inceleniyor":
+        return Colors.orange;
+      case "çözüldü":
+        return Colors.grey;
+      default:
+        return Colors.blueGrey;
     }
   }
 
