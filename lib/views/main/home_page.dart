@@ -7,7 +7,6 @@ import '../../view_models/auth_view_model.dart';
 import '../../models/notification_model.dart';
 import 'add_new_notif_page.dart';
 import 'notification_detail_page.dart';
-import 'profile_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -19,8 +18,10 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String searchQuery = "";
   String? selectedStatus;
-  String? selectedType; // ✅ normalize edilmiş değer tutuyor: "saglik", "teknikariza", ...
+  String? selectedType; // ✅ normalize edilmiş değer: "saglik", "teknikariza", ...
   bool showOnlyFollowed = false;
+
+  bool _emergencySnackShown = false; // ✅ Task-1: sadece 1 kere göstersin
 
   String capitalize(String name) {
     if (name.isEmpty) return name;
@@ -30,17 +31,25 @@ class _HomePageState extends State<HomePage> {
     }).join(' ');
   }
 
-  /// ✅ Tipi tek standarda indirger (en önemli kısım)
-  /// Örnek:
-  /// "Teknik Arıza" -> "teknikariza"
-  /// "teknik_ariza" -> "teknikariza"
-  /// "teknikAriza" -> "teknikariza"
-  /// "Sağlık" -> "saglik"
+  /// ✅ TEK NORMALİZASYON (Home + Map + Filtre aynı)
+  /// "Teknik Arıza" / "teknik_ariza" / "teknikAriza" => "teknikariza"
+  /// "Sağlık" => "saglik"
   String _normType(String t) {
     final lower = t.toLowerCase().trim();
     return lower
         .replaceAll(' ', '')
         .replaceAll('_', '')
+        .replaceAll('ı', 'i')
+        .replaceAll('ğ', 'g')
+        .replaceAll('ş', 's')
+        .replaceAll('ö', 'o')
+        .replaceAll('ü', 'u')
+        .replaceAll('ç', 'c');
+  }
+
+  String _normStatus(String s) {
+    final lower = s.toLowerCase().trim();
+    return lower
         .replaceAll('ı', 'i')
         .replaceAll('ğ', 'g')
         .replaceAll('ş', 's')
@@ -81,7 +90,7 @@ class _HomePageState extends State<HomePage> {
 
       // 4) Durum / Tür
       final matchesStatus =
-          selectedStatus == null || n.status.toLowerCase() == selectedStatus!;
+          selectedStatus == null || _normStatus(n.status) == selectedStatus!;
       final matchesType =
           selectedType == null || nType == selectedType!;
 
@@ -94,6 +103,22 @@ class _HomePageState extends State<HomePage> {
 
     final normalNotifs =
     filteredNotifications.where((n) => _normType(n.type) != "acil").toList();
+
+    // ✅ Task-1: Kullanıcı giriş yaptıktan sonra acil duyuru varsa 1 kere uyar
+    if (emergencyNotifs.isNotEmpty && !_emergencySnackShown) {
+      _emergencySnackShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text("⚠️ ACİL duyurunuz var! Lütfen kontrol edin."),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      });
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -177,33 +202,37 @@ class _HomePageState extends State<HomePage> {
                         ],
                       ),
                     ),
-                    ...emergencyNotifs.map((notif) => GestureDetector(
+                    ...emergencyNotifs.map(
+                          (notif) => GestureDetector(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => NotificationDetailPage(notification: notif),
+                          ),
+                        ),
+                        child: _buildNotificationCard(
+                          context,
+                          notif,
+                          user?.uid,
+                          forceEmergencyStyle: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+
+                  // 🟦 NORMAL LİSTE
+                  ...normalNotifs.map(
+                        (notif) => GestureDetector(
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) => NotificationDetailPage(notification: notif),
                         ),
                       ),
-                      child: _buildNotificationCard(
-                        context,
-                        notif,
-                        user?.uid,
-                        forceEmergencyStyle: true,
-                      ),
-                    )),
-                    const SizedBox(height: 8),
-                  ],
-
-                  // 🟦 NORMAL LİSTE
-                  ...normalNotifs.map((notif) => GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => NotificationDetailPage(notification: notif),
-                      ),
+                      child: _buildNotificationCard(context, notif, user?.uid),
                     ),
-                    child: _buildNotificationCard(context, notif, user?.uid),
-                  )),
+                  ),
                 ],
               ),
             ),
@@ -251,17 +280,22 @@ class _HomePageState extends State<HomePage> {
                     selectedColor: Colors.blue.shade100,
                     checkmarkColor: Colors.blue,
                   ),
-                  const SizedBox(height: 15),
 
+                  const SizedBox(height: 15),
                   const Text("Durum", style: TextStyle(fontWeight: FontWeight.bold)),
                   Wrap(
                     spacing: 8,
-                    children: ["açık", "inceleniyor", "çözüldü"].map((s) {
+                    children: const [
+                      {"label": "açık", "value": "acik"},
+                      {"label": "inceleniyor", "value": "inceleniyor"},
+                      {"label": "çözüldü", "value": "cozuldu"},
+                    ].map((s) {
+                      final v = s["value"]!;
                       return ChoiceChip(
-                        label: Text(s),
-                        selected: selectedStatus == s,
+                        label: Text(s["label"]!),
+                        selected: selectedStatus == v,
                         onSelected: (val) => setState(() {
-                          selectedStatus = val ? s : null;
+                          selectedStatus = val ? v : null;
                           setModalState(() {});
                         }),
                       );
@@ -330,7 +364,9 @@ class _HomePageState extends State<HomePage> {
       decoration: BoxDecoration(
         color: isEmergency ? Colors.red.shade50 : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isEmergency ? Colors.red.shade200 : Colors.grey.shade300),
+        border: Border.all(
+          color: isEmergency ? Colors.red.shade200 : Colors.grey.shade300,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,8 +437,9 @@ class _HomePageState extends State<HomePage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                    notif.type,
-                    style: const TextStyle(color: Colors.white, fontSize: 12)),
+                  notif.type,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
               ),
             ],
           ),
@@ -412,12 +449,12 @@ class _HomePageState extends State<HomePage> {
   }
 
   Color _statusColor(String status) {
-    switch (status.toLowerCase()) {
-      case "açık":
+    switch (_normStatus(status)) {
+      case "acik":
         return Colors.green;
       case "inceleniyor":
         return Colors.orange;
-      case "çözüldü":
+      case "cozuldu":
         return Colors.grey;
       default:
         return Colors.blueGrey;
