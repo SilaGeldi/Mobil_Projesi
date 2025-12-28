@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../../models/notification_model.dart';
 import '../../view_models/notification_view_model.dart';
 import '../../view_models/auth_view_model.dart';
+
+// ✅ HARİTAYA GİTMEK İÇİN MapView import
+import '../main/map_view.dart'; // <-- SENDEKİ PATH FARKLIYSA DÜZELT: map_view.dart nerede ise onu yaz.
 
 class NotificationDetailPage extends StatelessWidget {
   final NotificationModel notification;
@@ -12,12 +16,12 @@ class NotificationDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 🔥 ViewModel'i dinliyoruz (listen: true varsayılandır)
+    // ✅ ViewModel'i dinliyoruz (takip durumu vs. anlık güncellensin)
     final notifVM = Provider.of<NotificationViewModel>(context);
     final authVM = Provider.of<AuthViewModel>(context);
     final userId = authVM.currentUser?.uid;
 
-    // 🔥 BURASI ÖNEMLİ: Güncel listeden bu bildirimi buluyoruz ki takip durumu anlık güncellensin
+    // ✅ Güncel listeden aynı bildirimi bul (followers vb. güncel kalsın)
     final currentNotif = notifVM.notifications.firstWhere(
           (n) => n.notifId == notification.notifId,
       orElse: () => notification,
@@ -33,7 +37,7 @@ class NotificationDetailPage extends StatelessWidget {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
-          // ⭐ TAKİP ET BUTONU (HomePage ile aynı mantığa çekildi)
+          // ⭐ TAKİP ET BUTONU
           IconButton(
             icon: Icon(
               isFollowing ? Icons.bookmark : Icons.bookmark_border,
@@ -41,7 +45,6 @@ class NotificationDetailPage extends StatelessWidget {
             ),
             onPressed: () {
               if (userId != null && currentNotif.notifId != null) {
-                // ViewModel üzerinden işlem yapıyoruz
                 notifVM.toggleFollowNotification(currentNotif.notifId!, userId);
               }
             },
@@ -66,7 +69,11 @@ class NotificationDetailPage extends StatelessWidget {
                   ),
                   child: Text(
                     currentNotif.type.toUpperCase(),
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
                 Text(
@@ -86,10 +93,14 @@ class NotificationDetailPage extends StatelessWidget {
 
             const Divider(height: 40, thickness: 1),
 
-            // Açıklama Bölümü
+            // Açıklama
             const Text(
               "Açıklama",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blueGrey),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: Colors.blueGrey,
+              ),
             ),
             const SizedBox(height: 10),
             Text(
@@ -99,7 +110,7 @@ class NotificationDetailPage extends StatelessWidget {
 
             const SizedBox(height: 30),
 
-            // Bilgi Kartları Grubu
+            // Bilgi Kartı
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -110,24 +121,24 @@ class NotificationDetailPage extends StatelessWidget {
               child: Column(
                 children: [
                   _buildDetailRow(
-                      Icons.info_outline,
-                      "Durum",
-                      currentNotif.status,
-                      _statusColor(currentNotif.status)
+                    Icons.info_outline,
+                    "Durum",
+                    currentNotif.status,
+                    _statusColor(currentNotif.status),
                   ),
                   const Divider(height: 24),
                   _buildDetailRow(
-                      Icons.person_outline,
-                      "Oluşturan",
-                      currentNotif.createdByName,
-                      Colors.black87
+                    Icons.person_outline,
+                    "Oluşturan",
+                    currentNotif.createdByName,
+                    Colors.black87,
                   ),
                   const Divider(height: 24),
                   _buildDetailRow(
-                      Icons.location_on_outlined,
-                      "Konum",
-                      "${currentNotif.location.latitude.toStringAsFixed(4)}, ${currentNotif.location.longitude.toStringAsFixed(4)}",
-                      Colors.blue
+                    Icons.location_on_outlined,
+                    "Konum",
+                    "${currentNotif.location.latitude.toStringAsFixed(4)}, ${currentNotif.location.longitude.toStringAsFixed(4)}",
+                    Colors.blue,
                   ),
                 ],
               ),
@@ -135,16 +146,27 @@ class NotificationDetailPage extends StatelessWidget {
 
             const SizedBox(height: 40),
 
-            // Harita Butonu
+            // ✅ HARİTADA GÖRÜNTÜLE (ASIL FIX BURASI)
             SizedBox(
               width: double.infinity,
               height: 55,
               child: ElevatedButton.icon(
                 onPressed: () {
-                  debugPrint("Haritada gösteriliyor: ${currentNotif.location.latitude}");
+                  // ✅ Harita ekranına geç + kamerayı bu bildirime odakla
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MapView(
+                        focusNotification: currentNotif,
+                      ),
+                    ),
+                  );
                 },
                 icon: const Icon(Icons.map, color: Colors.white),
-                label: const Text("HARİTADA GÖRÜNTÜLE", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                label: const Text(
+                  "HARİTADA GÖRÜNTÜLE",
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.black,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -157,7 +179,6 @@ class NotificationDetailPage extends StatelessWidget {
     );
   }
 
-  // Detay Satırı Widget'ı
   Widget _buildDetailRow(IconData icon, String title, String value, Color valueColor) {
     return Row(
       children: [
@@ -167,7 +188,10 @@ class NotificationDetailPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-            Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: valueColor)),
+            Text(
+              value,
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: valueColor),
+            ),
           ],
         ),
       ],
@@ -176,15 +200,20 @@ class NotificationDetailPage extends StatelessWidget {
 
   Color _statusColor(String status) {
     switch (status.toLowerCase()) {
-      case "açık": return Colors.green;
-      case "inceleniyor": return Colors.orange;
-      case "çözüldü": return Colors.grey;
-      default: return Colors.blueGrey;
+      case "açık":
+        return Colors.green;
+      case "inceleniyor":
+        return Colors.orange;
+      case "çözüldü":
+        return Colors.grey;
+      default:
+        return Colors.blueGrey;
     }
   }
 
   String _formatFullDate(Timestamp ts) {
     final d = ts.toDate();
-    return "${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}";
+    return "${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year} "
+        "${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}";
   }
 }
