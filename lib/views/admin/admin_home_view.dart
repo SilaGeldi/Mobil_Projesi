@@ -52,7 +52,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
       appBar: AppBar(
         title: const Text("Admin Duyurular"),
         actions: [
-          /// 🚨 ACİL DUYURU
           TextButton.icon(
             onPressed: () {
               Navigator.push(
@@ -71,8 +70,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
           ),
         ],
       ),
-
-      /// ➕ YENİ BİLDİRİM EKLEME BUTONU
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.push(
@@ -85,10 +82,8 @@ class _AdminHomeViewState extends State<AdminHomeView> {
         },
         child: const Icon(Icons.add),
       ),
-
       body: Column(
         children: [
-          /// 🔍 ARAMA + FİLTRE
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
@@ -122,8 +117,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
               ],
             ),
           ),
-
-          /// 📋 LİSTE
           Expanded(
             child: notifications.isEmpty
                 ? const Center(child: Text("Kayıt bulunamadı"))
@@ -142,7 +135,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     );
   }
 
-  /// 🧩 KART
   Widget _notificationCard(
     BuildContext context,
     NotificationModel notif,
@@ -216,7 +208,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     );
   }
 
-  /// ⬆️ ALT KART – ADMIN AKSİYONLARI
   void _openAdminBottomSheet(NotificationModel notif) {
     final descController =
         TextEditingController(text: notif.description);
@@ -243,9 +234,13 @@ class _AdminHomeViewState extends State<AdminHomeView> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
+              const SizedBox(height: 6),
+             Text(
+  "👤 ${notif.createdByName.isEmpty ? 'BOŞ GELİYOR' : notif.createdByName}",
+  style: const TextStyle(color: Colors.red),
+),
 
               const SizedBox(height: 12),
-
               TextField(
                 controller: descController,
                 maxLines: 3,
@@ -254,31 +249,29 @@ class _AdminHomeViewState extends State<AdminHomeView> {
                   border: OutlineInputBorder(),
                 ),
               ),
-
               const SizedBox(height: 12),
-
               Wrap(
                 spacing: 8,
                 children: ["Açık", "İnceleniyor", "Çözüldü"]
                     .map(
                       (s) => ChoiceChip(
                         label: Text(s),
-                        selected: notif.status == s,
+                        selected:
+                            notif.status.toLowerCase() ==
+                                s.toLowerCase(),
                         onSelected: (_) {
                           context
                               .read<NotificationViewModel>()
                               .updateNotificationStatus(
                                 notif.notifId!,
-                                s,
+                                s.toLowerCase(),
                               );
                         },
                       ),
                     )
                     .toList(),
               ),
-
               const SizedBox(height: 12),
-
               Row(
                 children: [
                   Expanded(
@@ -321,7 +314,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
     );
   }
 
-  /// 🎛️ GELİŞMİŞ FİLTRE
   void _showFilterBottomSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -340,7 +332,6 @@ class _AdminHomeViewState extends State<AdminHomeView> {
                     style:
                         TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 20),
-
                 FilterChip(
                   label: const Text("Sadece Takip Ettiklerim"),
                   selected: showOnlyFollowed,
@@ -349,9 +340,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
                     setModalState(() {});
                   },
                 ),
-
                 const SizedBox(height: 15),
-
                 Wrap(
                   spacing: 8,
                   children: const [
@@ -372,9 +361,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
                     );
                   }).toList(),
                 ),
-
                 const SizedBox(height: 12),
-
                 Wrap(
                   spacing: 8,
                   children: const [
@@ -395,9 +382,7 @@ class _AdminHomeViewState extends State<AdminHomeView> {
                     );
                   }).toList(),
                 ),
-
                 const SizedBox(height: 20),
-
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -433,12 +418,12 @@ class _AdminHomeViewState extends State<AdminHomeView> {
   }
 
   Color _statusColor(String status) {
-    switch (status) {
-      case "Açık":
+    switch (status.toLowerCase()) {
+      case "açık":
         return Colors.green;
-      case "İnceleniyor":
+      case "inceleniyor":
         return Colors.orange;
-      case "Çözüldü":
+      case "çözüldü":
         return Colors.red;
       default:
         return Colors.grey;
