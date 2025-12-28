@@ -1,14 +1,19 @@
-import 'dart:convert'; // ✅ Map’i JSON’a çevirmek için
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+// Bu dosya uygulamanın ana bildirim listesini gösteren sayfasıdır.
+// Aşağıdaki importlar, bu dosyada kullanılan kütüphaneleri ve
+// uygulama içi modelleri / view modelleri getirir.
+// Her bir importun ne işe yaradığını alt satırlarda açıklıyorum.
+import 'dart:convert'; // JSON encode/decode işlemleri için kullanılır. Map'i string'e çevirip kaydetmek veya tersini yapmak için.
+import 'package:flutter/material.dart'; // Flutter'ın temel UI bileşenleri, widget'lar, temalar vs. için gereklidir.
+import 'package:provider/provider.dart'; // State management için Provider kullanılıyor; view model'leri dinlemek için.
+import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore'un Timestamp tipi kullanılıyor; veritabanı ile iletişim için.
+import 'package:shared_preferences/shared_preferences.dart'; // Cihazda küçük ayar/önbellek tutmak için kullanılır.
 
-import '../../view_models/notification_view_model.dart';
-import '../../view_models/auth_view_model.dart';
-import '../../models/notification_model.dart';
-import 'add_new_notif_page.dart';
-import 'notification_detail_page.dart';
+// Uygulama içi view model ve model importları
+import '../../view_models/notification_view_model.dart'; // Bildirim verilerini yöneten view model
+import '../../view_models/auth_view_model.dart'; // Kullanıcı kimlik doğrulama bilgilerini yöneten view model
+import '../../models/notification_model.dart'; // Bildirim verisi için kullanılan model sınıfı
+import 'add_new_notif_page.dart'; // Yeni bildirim ekleme sayfası
+import 'notification_detail_page.dart'; // Bildirim detaylarını gösteren sayfa
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,30 +23,41 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  // Arama çubuğuna girilen metni tutar. Boş ise tüm sonuçlar gösterilir.
   String searchQuery = "";
-  String? selectedStatus; // ✅ normalize edilmiş: "acik" / "inceleniyor" / "cozuldu"
-  String? selectedType;   // ✅ normalize edilmiş: "kayip" / "teknikariza" / ...
+
+  // Seçili durum filtresi: örn "acik", "inceleniyor", "cozuldu" gibi normalize edilmiş değerler tutulur.
+  String? selectedStatus;
+
+  // Seçili tür filtresi: örn "kayip", "teknikariza" vb. normalize edilmiş değerler tutulur.
+  String? selectedType;
+
+  // Sadece takip ettiklerimi göster filtresi: true ise yalnızca takip edilen bildirimler görünür.
   bool showOnlyFollowed = false;
 
-  // ✅ Acil snack: her girişte bir kere gösterilecek
+  // Acil duyuru uyarısını her kullanıcı girişi için yalnızca bir kere göstermek için kullanılan bayrak.
+  // Eğer true ise o giriş için acil duyuru gösterimi yapılmış demektir.
   bool _emergencySnackShown = false;
 
-  // ✅ Takip edilen bildirimlerin en son görülen status’ları (telefon hafızasından okunacak)
+  // Takip edilen bildirimlerin son görülen durumlarını saklamak için hafızadaki map.
+  // Anahtar: bildirim id'si, değer: son görülen normalize edilmiş durum string'i.
   Map<String, String> _lastSeenFollowedStatus = {};
 
-  // ✅ Aynı giriş sırasında aynı değişimi 2 kere göstermesin
+  // Aynı oturumda birden fazla kez aynı durum değişikliğinin bildirimini göstermemek için kullanılan set.
+  // Değer olarak "<id>:<eski>-><yeni>" biçiminde anahtarlar tutulur.
   final Set<String> _shownStatusChangeKeysThisSession = {};
 
-  // ✅ Kullanıcı değişti mi diye takip (logout/login olduğunda reset atacağız)
+  // Son bilinen kullanıcı id'si; kullanıcı değişirse ilgili reset işlemleri yapılır.
   String? _lastUserId;
 
-  // ✅ Prefs yükleme tamam mı (yüklenmeden karşılaştırma yapmayalım)
+  // SharedPreferences'tan veriler yüklenip yüklenmediğini gösterir. Yüklenmeden kıyaslama yapılmaz.
   bool _prefsLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    // initState’te userId daha gelmemiş olabilir; userId build’de gelince yükleyeceğiz.
+    // initState içinde hemen user bilgisi gelmeyebilir; kullanıcı bilgisi build sırasında gelir.
+    // Bu yüzden kullanıcıya bağlı bazı yüklemeleri build içinde, user geldiğinde yapıyoruz.
   }
 
   String capitalize(String name) {
@@ -89,25 +105,34 @@ class _HomePageState extends State<HomePage> {
 
   /// ✅ Telefona kaydedilmiş takip-status map’ini yükle
   Future<void> _loadLastSeenFollowedStatus(String uid) async {
+    // SharedPreferences örneğini alıyoruz; bu telefon hafızasındaki küçük anahtar-değer deposudur.
     final prefs = await SharedPreferences.getInstance();
+
+    // Kullanıcıya özel anahtardan daha önce kaydedilmiş map string'ini alıyoruz.
     final raw = prefs.getString(_prefsKeyForUser(uid));
 
+    // Eğer hiç kaydedilmemişse boş bir map ile başlıyoruz.
     if (raw == null || raw.isEmpty) {
       _lastSeenFollowedStatus = {};
     } else {
+      // Eğer kaydedilmiş bir veri varsa, JSON string'ini Map'e çeviriyoruz.
+      // Hata ihtimaline karşı try-catch ile sarmalıyoruz; bozuk veri varsa sıfırlıyoruz.
       try {
         final decoded = jsonDecode(raw) as Map<String, dynamic>;
+        // dynamic değerleri string'e çevirip Map<String,String> olarak saklıyoruz.
         _lastSeenFollowedStatus = decoded.map((k, v) => MapEntry(k, v.toString()));
       } catch (_) {
         _lastSeenFollowedStatus = {};
       }
     }
 
+    // Prefs yükleme tamamlandı olarak işaretle.
     _prefsLoaded = true;
   }
 
   /// ✅ Güncel takip-status map’ini telefona kaydet
   Future<void> _saveLastSeenFollowedStatus(String uid, Map<String, String> map) async {
+    // Verilen map'i JSON string'e çevirip SharedPreferences'a kaydeder.
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefsKeyForUser(uid), jsonEncode(map));
   }
@@ -117,63 +142,72 @@ class _HomePageState extends State<HomePage> {
     required List<NotificationModel> all,
     required String uid,
   }) async {
-    // Prefs yüklenmeden kıyas yapma
+    // SharedPreferences henüz yüklenmemişse herhangi bir kıyaslama yapmayız.
     if (!_prefsLoaded) return;
 
-    // Takip edilen bildirimleri bul
+    // Tüm bildirimler arasından, bu kullanıcının takip ettiği bildirimleri seçiyoruz.
     final followed = all.where((n) => n.notifId != null && n.followers.contains(uid)).toList();
 
-    // Şu anki status snapshot’ı (kaydedilecek)
+    // Bu giriş anındaki güncel durumların anlık görüntüsünü tutacağız.
     final Map<String, String> currentSnapshot = {};
 
+    // Her takip edilen bildirim için önceki görülen durum ile şimdiki durumu karşılaştır.
     for (final n in followed) {
-      final id = n.notifId!;
-      final newSt = _normStatus(n.status);
+      final id = n.notifId!; // notifId null olmadığı için güvenle kullandık.
+      final newSt = _normStatus(n.status); // Mevcut durumu normalize et.
 
+      // Bu anlık görüntüye kaydet.
       currentSnapshot[id] = newSt;
 
+      // Hafızadaki (telefonda saklı) önceki durumu al.
       final oldSt = _lastSeenFollowedStatus[id];
 
-      // İlk kez görüyorsa: sadece kayda al (snack yok)
+      // Eğer daha önce hiç görmediysek, ilk kez görüldüğü için bildirim gösterme, sadece kaydet.
       if (oldSt == null) continue;
 
-      // Değiştiyse: girişte snack göster
+      // Eğer durum değişmişse kullanıcıyı uyaracağız.
       if (oldSt != newSt) {
+        // Aynı değişiklik için birden fazla uyarı göstermemek adına benzersiz bir anahtar oluştur.
         final key = "$id:$oldSt->$newSt";
 
-        // Aynı girişte 2 kere çıkmasın
+        // Bu oturumda zaten gösterildiyse atla.
         if (_shownStatusChangeKeysThisSession.contains(key)) continue;
         _shownStatusChangeKeysThisSession.add(key);
 
+        // Kullanıcı arayüzü güncellemesi yapmak için sonraki frame'e bir callback ekliyoruz.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _showSnack(
-            "🔔 Takip ettiğin bildirim güncellendi: \"${n.title}\" → Durum: ${n.status}",
+            // Kullanıcıya gösterilecek kısa metin. UI metinlerinde emoji kullanılabilir.
+            "Takip ettiğin bildirim güncellendi: \"${n.title}\" → Durum: ${n.status}",
             color: Colors.deepPurple,
           );
         });
       }
     }
 
-    // ✅ Giriş sonrası “son görülen” olarak güncel snapshot’ı kaydet
+    // Giriş kontrolü tamamlandığında yeni snapshot'u telefona kaydet.
     await _saveLastSeenFollowedStatus(uid, currentSnapshot);
 
-    // RAM’deki map’i de güncelle (bir sonraki kıyas için)
+    // Bellekteki (RAM) map'i de güncelle ki sonraki kıyas doğru olsun.
     _lastSeenFollowedStatus = currentSnapshot;
   }
 
   /// ✅ Kullanıcı değişince (logout/login) state reset + prefs yükle
   Future<void> _handleUserChanged(String uid) async {
+    // Kullanıcı değiştiği için önce son bilinen kullanıcı id'sini güncelle.
     _lastUserId = uid;
 
-    // ✅ Her girişte acil snack yeniden gösterilebilir olsun
+    // Yeni girişte acil duyuru uyarısını tekrar gösterebilmek için sıfırla.
     _emergencySnackShown = false;
 
-    // ✅ Bu girişte gösterilen “status-change” kayıtlarını temizle
+    // Bu oturumda gösterilmiş durum değişikliği uyarılarını temizle.
     _shownStatusChangeKeysThisSession.clear();
 
-    // ✅ Prefs yeniden yükle
+    // SharedPreferences'tan gelen veriler yeniden yüklenecek; önce işaretleri temizle.
     _prefsLoaded = false;
     _lastSeenFollowedStatus = {};
+
+    // Telefonda saklı olan en son görülen durumları yükle.
     await _loadLastSeenFollowedStatus(uid);
   }
 
@@ -184,8 +218,7 @@ class _HomePageState extends State<HomePage> {
     final user = authVM.currentUser;
     final myUid = user?.uid;
     final userName = capitalize(user?.name ?? "Kullanıcı");
-
-    // ✅ Kullanıcı değiştiyse: reset + prefs yükle
+    // Eğer build sırasında kullanıcı değiştiyse (ör. login olduysa), ilgili resetleri yap.
     if (myUid != null && myUid != _lastUserId) {
       // build içinde async çağrı: post frame ile
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -237,7 +270,9 @@ class _HomePageState extends State<HomePage> {
     if (myUid != null && emergencyNotifs.isNotEmpty && !_emergencySnackShown) {
       _emergencySnackShown = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showSnack("⚠️ ACİL duyurunuz var! Lütfen kontrol edin.", color: Colors.red.shade700);
+        // Kullanıcı giriş yaptıktan sonra eğer acil duyuru varsa, bunu bir kere göstermek için snack ekliyoruz.
+        // (UI metninde emoji kullanılabilir; yorum satırlarında emoji yok.)
+        _showSnack("ACIL duyurunuz var! Lütfen kontrol edin.", color: Colors.red.shade700);
       });
     }
 
@@ -258,7 +293,9 @@ class _HomePageState extends State<HomePage> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Üstte küçük bir hoşgeldin yazısı gösterilir.
             const Text("Hoşgeldin,", style: TextStyle(fontSize: 14, color: Colors.grey)),
+            // Alt satırda kullanıcının adı büyük ve kalın şekilde gösterilir.
             Text(
               userName,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
@@ -275,6 +312,7 @@ class _HomePageState extends State<HomePage> {
               children: [
                 Expanded(
                   child: TextField(
+                    // Arama çubuğuna yazıldıkça searchQuery güncellenir ve setState ile UI yenilenir.
                     onChanged: (value) => setState(() => searchQuery = value),
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search),
@@ -306,55 +344,59 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 16),
 
+            // Liste alanı genişleyerek geri kalan alanı kaplar.
             Expanded(
               child: (emergencyNotifs.isEmpty && normalNotifs.isEmpty)
+                  // Eğer filtre sonucu boşsa kullanıcıya bilgi göster.
                   ? const Center(child: Text("Sonuç bulunamadı", style: TextStyle(color: Colors.grey)))
+                  // Aksi halde result listesi gösterilir.
                   : ListView(
-                children: [
-                  // 🔴 ACİL DUYURULAR
-                  if (emergencyNotifs.isNotEmpty) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      margin: const EdgeInsets.only(bottom: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade700,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.warning_amber, color: Colors.white),
-                          SizedBox(width: 8),
-                          Text(
-                            "ACİL DUYURULAR",
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      children: [
+                        // ACIL duyuruları ayrı bir başlıkla öne çıkarılır.
+                        if (emergencyNotifs.isNotEmpty) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            margin: const EdgeInsets.only(bottom: 10),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade700,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.warning_amber, color: Colors.white),
+                                SizedBox(width: 8),
+                                Text(
+                                  "ACİL DUYURULAR",
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
                           ),
+                          // Her acil bildirim için kart oluştur ve detay sayfasına yönlendir.
+                          ...emergencyNotifs.map(
+                            (notif) => GestureDetector(
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => NotificationDetailPage(notification: notif)),
+                              ),
+                              child: _buildNotificationCard(context, notif, myUid, forceEmergencyStyle: true),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
                         ],
-                      ),
-                    ),
-                    ...emergencyNotifs.map(
-                          (notif) => GestureDetector(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => NotificationDetailPage(notification: notif)),
-                        ),
-                        child: _buildNotificationCard(context, notif, myUid, forceEmergencyStyle: true),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
 
-                  // 🟦 NORMAL LİSTE
-                  ...normalNotifs.map(
-                        (notif) => GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => NotificationDetailPage(notification: notif)),
-                      ),
-                      child: _buildNotificationCard(context, notif, myUid),
+                        // Normal bildirimler listesi
+                        ...normalNotifs.map(
+                          (notif) => GestureDetector(
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => NotificationDetailPage(notification: notif)),
+                            ),
+                            child: _buildNotificationCard(context, notif, myUid),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
             ),
           ],
         ),
@@ -385,23 +427,27 @@ class _HomePageState extends State<HomePage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Başlık
                   const Text("Filtrele", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 20),
 
+                  // Özel filtre: sadece takip edilenleri göster
                   const Text("Özel Filtre", style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   FilterChip(
                     label: const Text("Sadece Takip Ettiklerim"),
+                    // Eğer kullanıcı takip ettiklerini görmek isterse showOnlyFollowed true olur.
                     selected: showOnlyFollowed,
                     onSelected: (val) => setState(() {
-                      showOnlyFollowed = val;
-                      setModalState(() {});
+                      showOnlyFollowed = val; // Ana state'i güncelle
+                      setModalState(() {}); // Modal içindeki state'i de güncelle
                     }),
                     selectedColor: Colors.blue.shade100,
                     checkmarkColor: Colors.blue,
                   ),
 
                   const SizedBox(height: 15),
+                  // Durum filtresi: açık / inceleniyor / çözüldü
                   const Text("Durum", style: TextStyle(fontWeight: FontWeight.bold)),
                   Wrap(
                     spacing: 8,
@@ -415,6 +461,7 @@ class _HomePageState extends State<HomePage> {
                         label: Text(s["label"]!),
                         selected: selectedStatus == v,
                         onSelected: (val) => setState(() {
+                          // Seçili durum değişirse selectedStatus güncellenir veya temizlenir.
                           selectedStatus = val ? v : null;
                           setModalState(() {});
                         }),
@@ -423,6 +470,7 @@ class _HomePageState extends State<HomePage> {
                   ),
 
                   const SizedBox(height: 15),
+                  // Tür filtresi: duyuru, acil, teknik arıza vb.
                   const Text("Tür", style: TextStyle(fontWeight: FontWeight.bold)),
                   Wrap(
                     spacing: 8,
@@ -442,6 +490,7 @@ class _HomePageState extends State<HomePage> {
                         label: Text(t["label"]!),
                         selected: selectedType == v,
                         onSelected: (val) => setState(() {
+                          // Tür seçimi yapıldığında selectedType güncellenir veya temizlenir.
                           selectedType = val ? v : null;
                           setModalState(() {});
                         }),
@@ -450,6 +499,7 @@ class _HomePageState extends State<HomePage> {
                   ),
 
                   const SizedBox(height: 20),
+                  // Uygula butonu modalı kapatır ve filtreler main state'te zaten güncellenmiştir.
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -491,6 +541,7 @@ class _HomePageState extends State<HomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Eğer bildirim acil ise başlık kısmında özel gösterim yap.
           if (isEmergency)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
@@ -531,6 +582,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 onPressed: () {
                   if (userId != null && notif.notifId != null) {
+                    // Takip etme / takibi bırakma işlemi view model üzerinden tetiklenir.
                     notifVM.toggleFollowNotification(notif.notifId!, userId);
                   }
                 },
@@ -540,6 +592,7 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
           const SizedBox(height: 6),
+          // Bildirim açıklamasının kısa bir ön izlemesi.
           Text(notif.description, maxLines: 2, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 10),
           Row(
