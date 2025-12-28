@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../view_models/auth_view_model.dart';
 import '../../view_models/notification_view_model.dart';
 import '../../models/notification_model.dart';
 import '../main/add_new_notif_page.dart';
-import '../main/notification_detail_page.dart'; // ✅ Detay sayfası import
 
 class AdminHomeView extends StatefulWidget {
   const AdminHomeView({super.key});
@@ -14,255 +14,434 @@ class AdminHomeView extends StatefulWidget {
 }
 
 class _AdminHomeViewState extends State<AdminHomeView> {
-  String selectedStatus = "Hepsi"; // "Hepsi", "aktif", "pasif", "inceleniyor"
-  String selectedType = "Hepsi";   // "Hepsi", "acil", "duyuru", "guvenlik", "kayip", ...
-
-  /// ✅ Home/Map ile uyumlu type normalizasyonu
-  /// "Güvenlik" -> "guvenlik", "Teknik Arıza" -> "teknikariza" vb.
-  String _normType(String t) {
-    final lower = t.toLowerCase().trim();
-    return lower
-        .replaceAll(' ', '')
-        .replaceAll('_', '')
-        .replaceAll('ı', 'i')
-        .replaceAll('ğ', 'g')
-        .replaceAll('ş', 's')
-        .replaceAll('ö', 'o')
-        .replaceAll('ü', 'u')
-        .replaceAll('ç', 'c');
-  }
+  String searchQuery = "";
+  String? selectedStatus;
+  String? selectedType;
+  bool showOnlyFollowed = false;
 
   @override
   Widget build(BuildContext context) {
-    final notifVM = Provider.of<NotificationViewModel>(context);
+    final notifVM = context.watch<NotificationViewModel>();
+    final authVM = context.watch<AuthViewModel>();
+    final userId = authVM.currentUser?.uid;
 
-    // ✅ Filtrelenmiş bildirim listesi
-    final filtered = notifVM.notifications.where((n) {
+    final notifications = notifVM.notifications.where((n) {
+      final matchesSearch =
+          n.title.toLowerCase().contains(searchQuery.toLowerCase()) ||
+          n.description.toLowerCase().contains(searchQuery.toLowerCase());
+
       final matchesStatus =
-          selectedStatus == "Hepsi" || n.status == selectedStatus;
+          selectedStatus == null ||
+          n.status.toLowerCase() == selectedStatus;
 
-      // ✅ type karşılaştırması normalize edildi
       final matchesType =
-          selectedType == "Hepsi" || _normType(n.type) == selectedType;
+          selectedType == null ||
+          n.type.toLowerCase() == selectedType;
 
-      return matchesStatus && matchesType;
+      final matchesFollowed =
+          !showOnlyFollowed ||
+          (userId != null && n.followers.contains(userId));
+
+      return matchesSearch &&
+          matchesStatus &&
+          matchesType &&
+          matchesFollowed;
     }).toList();
 
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.red.shade700,
-        foregroundColor: Colors.white,
-        title: const Text("Admin Yönetim Paneli"),
-        elevation: 0,
-      ),
-      body: Column(
-        children: [
-          const SizedBox(height: 12),
-
-          // ✅ ACİL DURUM MODÜLÜ
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.campaign, color: Colors.red.shade700),
-                    const SizedBox(width: 6),
-                    Text(
-                      "ACİL DURUM MODÜLÜ",
-                      style: TextStyle(
-                        color: Colors.red.shade700,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+        title: const Text("Admin Duyurular"),
+        actions: [
+          /// 🚨 ACİL DUYURU
+          TextButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      const AddNewNotificationPage(isEmergency: true),
                 ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade700,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 4,
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                          const AddNewNotificationPage(isEmergency: true),
-                        ),
-                      );
-                    },
-                    child: const Text(
-                      "YENİ ACİL DUYURU YAYINLA",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              );
+            },
+            icon: const Icon(Icons.warning, color: Colors.red),
+            label: const Text(
+              "Acil Duyuru Yayınla",
+              style: TextStyle(color: Colors.red),
             ),
           ),
+        ],
+      ),
 
-          const SizedBox(height: 12),
+      /// ➕ YENİ BİLDİRİM EKLEME BUTONU
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) =>
+                  const AddNewNotificationPage(isEmergency: false),
+            ),
+          );
+        },
+        child: const Icon(Icons.add),
+      ),
 
-          // Filtre Barı
+      body: Column(
+        children: [
+          /// 🔍 ARAMA + FİLTRE
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.all(12),
             child: Row(
               children: [
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: selectedStatus,
+                  child: TextField(
                     decoration: InputDecoration(
-                      labelText: "Filtre: Durum",
+                      hintText: "Ara...",
+                      prefixIcon: const Icon(Icons.search),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
                     ),
-                    items: const ["Hepsi", "aktif", "pasif", "inceleniyor"]
-                        .map((s) =>
-                        DropdownMenuItem(value: s, child: Text(s)))
-                        .toList(),
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setState(() => selectedStatus = v);
-                    },
+                    onChanged: (v) =>
+                        setState(() => searchQuery = v),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: selectedType,
-                    decoration: InputDecoration(
-                      labelText: "Filtre: Tür",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                    ),
-
-                    // ✅ Buradaki value’ları da normalize/tek standarda çektim
-                    items: const [
-                      "Hepsi",
-                      "acil",
-                      "duyuru",
-                      "guvenlik",
-                      "kayip",
-                      "saglik",
-                      "teknikariza",
-                      "cevre",
-                      "diger",
-                    ].map((t) {
-                      // Ekranda büyük yazsın diye:
-                      final label = (t == "Hepsi") ? "HEPSİ" : t.toUpperCase();
-                      return DropdownMenuItem(value: t, child: Text(label));
-                    }).toList(),
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setState(() => selectedType = v);
-                    },
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: Icon(
+                    Icons.filter_list,
+                    color: (selectedStatus != null ||
+                            selectedType != null ||
+                            showOnlyFollowed)
+                        ? Colors.deepPurple
+                        : Colors.grey,
                   ),
+                  onPressed: () =>
+                      _showFilterBottomSheet(context),
                 ),
               ],
             ),
           ),
 
-          const SizedBox(height: 10),
-
-          // Liste
+          /// 📋 LİSTE
           Expanded(
-            child: filtered.isEmpty
-                ? const Center(child: Text("Bildirim yok"))
+            child: notifications.isEmpty
+                ? const Center(child: Text("Kayıt bulunamadı"))
                 : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: filtered.length,
-              itemBuilder: (context, index) {
-                final notif = filtered[index];
-                return _AdminNotifTile(notif: notif);
-              },
-            ),
+                    padding: const EdgeInsets.all(12),
+                    itemCount: notifications.length,
+                    itemBuilder: (_, i) => _notificationCard(
+                      context,
+                      notifications[i],
+                      userId,
+                    ),
+                  ),
           ),
         ],
       ),
     );
   }
-}
 
-class _AdminNotifTile extends StatelessWidget {
-  final NotificationModel notif;
-  const _AdminNotifTile({required this.notif});
+  /// 🧩 KART
+  Widget _notificationCard(
+    BuildContext context,
+    NotificationModel notif,
+    String? userId,
+  ) {
+    final notifVM = context.read<NotificationViewModel>();
+    final isFollowing =
+        userId != null && notif.followers.contains(userId);
 
-  String _normType(String t) {
-    final lower = t.toLowerCase().trim();
-    return lower
-        .replaceAll(' ', '')
-        .replaceAll('_', '')
-        .replaceAll('ı', 'i')
-        .replaceAll('ğ', 'g')
-        .replaceAll('ş', 's')
-        .replaceAll('ö', 'o')
-        .replaceAll('ü', 'u')
-        .replaceAll('ç', 'c');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isEmergency = (_normType(notif.type) == "acil");
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: isEmergency ? Colors.red.shade50 : Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isEmergency ? Colors.red.shade200 : Colors.grey.shade300,
+    return GestureDetector(
+      onTap: () => _openAdminBottomSheet(notif),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade300),
         ),
-      ),
-      child: ListTile(
-        // ✅ İŞTE EKSİK OLAN BU: tıklayınca detaya git
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => NotificationDetailPage(notification: notif),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    notif.title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(
+                    isFollowing
+                        ? Icons.bookmark
+                        : Icons.bookmark_border,
+                    color: isFollowing
+                        ? Colors.deepPurple
+                        : Colors.grey,
+                  ),
+                  onPressed: () {
+                    if (userId != null) {
+                      notifVM.toggleFollowNotification(
+                        notif.notifId!,
+                        userId,
+                      );
+                    }
+                  },
+                ),
+              ],
             ),
-          );
-        },
-
-        leading: CircleAvatar(
-          backgroundColor: isEmergency ? Colors.red.shade700 : Colors.orange,
-          child: Icon(
-            isEmergency ? Icons.warning_amber : Icons.notifications,
-            color: Colors.white,
-          ),
+            const SizedBox(height: 6),
+            Text(
+              notif.description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _chip(notif.status, _statusColor(notif.status)),
+                _chip(notif.type, Colors.red.shade400),
+              ],
+            ),
+          ],
         ),
-        title: Text(
-          notif.title,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: isEmergency ? Colors.red.shade900 : Colors.black,
-          ),
-        ),
-        subtitle: Text("Tür: ${notif.type.toUpperCase()}"),
-        trailing: const Icon(Icons.chevron_right), // ✅ Detaya gittiği belli olsun
       ),
     );
+  }
+
+  /// ⬆️ ALT KART – ADMIN AKSİYONLARI
+  void _openAdminBottomSheet(NotificationModel notif) {
+    final descController =
+        TextEditingController(text: notif.description);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            16,
+            16,
+            MediaQuery.of(context).viewInsets.bottom + 16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                notif.title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              TextField(
+                controller: descController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: "Açıklama",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              Wrap(
+                spacing: 8,
+                children: ["Açık", "İnceleniyor", "Çözüldü"]
+                    .map(
+                      (s) => ChoiceChip(
+                        label: Text(s),
+                        selected: notif.status == s,
+                        onSelected: (_) {
+                          context
+                              .read<NotificationViewModel>()
+                              .updateNotificationStatus(
+                                notif.notifId!,
+                                s,
+                              );
+                        },
+                      ),
+                    )
+                    .toList(),
+              ),
+
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.save),
+                      label: const Text("Kaydet"),
+                      onPressed: () {
+                        context
+                            .read<NotificationViewModel>()
+                            .updateNotificationDescription(
+                              notif.notifId!,
+                              descController.text,
+                            );
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.delete,
+                          color: Colors.red),
+                      label: const Text("Sil"),
+                      onPressed: () {
+                        context
+                            .read<NotificationViewModel>()
+                            .deleteNotification(
+                              notif.notifId!,
+                            );
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// 🎛️ GELİŞMİŞ FİLTRE
+  void _showFilterBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(builder: (context, setModalState) {
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Filtrele",
+                    style:
+                        TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 20),
+
+                FilterChip(
+                  label: const Text("Sadece Takip Ettiklerim"),
+                  selected: showOnlyFollowed,
+                  onSelected: (val) {
+                    setState(() => showOnlyFollowed = val);
+                    setModalState(() {});
+                  },
+                ),
+
+                const SizedBox(height: 15),
+
+                Wrap(
+                  spacing: 8,
+                  children: const [
+                    {"label": "Açık", "value": "açık"},
+                    {"label": "İnceleniyor", "value": "inceleniyor"},
+                    {"label": "Çözüldü", "value": "çözüldü"},
+                  ].map((s) {
+                    return ChoiceChip(
+                      label: Text(s["label"]!),
+                      selected: selectedStatus == s["value"],
+                      onSelected: (val) {
+                        setState(() {
+                          selectedStatus =
+                              val ? s["value"] : null;
+                        });
+                        setModalState(() {});
+                      },
+                    );
+                  }).toList(),
+                ),
+
+                const SizedBox(height: 12),
+
+                Wrap(
+                  spacing: 8,
+                  children: const [
+                    {"label": "Acil", "value": "acil"},
+                    {"label": "Genel", "value": "genel"},
+                    {"label": "Bilgi", "value": "bilgi"},
+                  ].map((t) {
+                    return ChoiceChip(
+                      label: Text(t["label"]!),
+                      selected: selectedType == t["value"],
+                      onSelected: (val) {
+                        setState(() {
+                          selectedType =
+                              val ? t["value"] : null;
+                        });
+                        setModalState(() {});
+                      },
+                    );
+                  }).toList(),
+                ),
+
+                const SizedBox(height: 20),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text("Uygula"),
+                  ),
+                ),
+              ],
+            ),
+          );
+        });
+      },
+    );
+  }
+
+  Widget _chip(String text, Color color) {
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case "Açık":
+        return Colors.green;
+      case "İnceleniyor":
+        return Colors.orange;
+      case "Çözüldü":
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
   }
 }
