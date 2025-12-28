@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/notification_model.dart';
@@ -7,10 +8,29 @@ class NotificationViewModel extends ChangeNotifier {
 
   List<NotificationModel> notifications = [];
 
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _sub;
+
   NotificationViewModel() {
-    fetchNotifications();
+    _listenNotifications(); // ✅ Real-time dinleme
   }
 
+  /// ✅ Firestore'u canlı dinler (admin değiştirince user tarafı otomatik güncellenir)
+  void _listenNotifications() {
+    _sub?.cancel();
+    _sub = _firestore
+        .collection('notifications')
+        .orderBy('date', descending: true)
+        .snapshots()
+        .listen((snapshot) {
+      notifications = snapshot.docs
+          .map((doc) => NotificationModel.fromMap(doc.data(), doc.id))
+          .toList();
+
+      notifyListeners();
+    });
+  }
+
+  /// Eski fetch'i de bırakıyorum (istersen manuel çağırırsın)
   Future<void> fetchNotifications() async {
     final snapshot = await _firestore
         .collection('notifications')
@@ -18,86 +38,63 @@ class NotificationViewModel extends ChangeNotifier {
         .get();
 
     notifications = snapshot.docs
-        .map((doc) =>
-        NotificationModel.fromMap(doc.data(), doc.id))
+        .map((doc) => NotificationModel.fromMap(doc.data(), doc.id))
         .toList();
 
     notifyListeners();
   }
 
   Future<void> addNotification(NotificationModel notification) async {
-    await _firestore
-        .collection('notifications')
-        .add(notification.toMap());
-
-    // 🔥 ekledikten sonra listeyi yenile
-    await fetchNotifications();
+    await _firestore.collection('notifications').add(notification.toMap());
+    // ✅ snapshots zaten güncelleyecek; ekstra fetch zorunlu değil.
   }
+
   Future<void> toggleFollowNotification(String notificationId, String userId) async {
     final docRef = _firestore.collection('notifications').doc(notificationId);
     final doc = await docRef.get();
-    
-    if (doc.exists) {
-      List followers = doc.data()?['followers'] ?? [];
-      
-      if (followers.contains(userId)) {
-        // Zaten takip ediyorsa listeden çıkar (Takibi Bırak)
-        await docRef.update({
-          'followers': FieldValue.arrayRemove([userId])
-        });
-      } else {
-        // Takip etmiyorsa listeye ekle (Takip Et)
-        await docRef.update({
-          'followers': FieldValue.arrayUnion([userId])
-        });
-      }
-      // Yerel listeyi güncellemek için tekrar çek
-      await fetchNotifications();
+
+    if (!doc.exists) return;
+
+    final List followers = (doc.data()?['followers'] ?? []) as List;
+
+    if (followers.contains(userId)) {
+      await docRef.update({'followers': FieldValue.arrayRemove([userId])});
+    } else {
+      await docRef.update({'followers': FieldValue.arrayUnion([userId])});
     }
+    // ✅ snapshots zaten güncelleyecek
   }
-
-
 
   List<NotificationModel> getFollowedNotifications(String userId) {
-    return notifications.where((notif) {
-      // NotificationModel içinde 'followers' listesi olduğunu varsayıyoruz
-      // Eğer modelinizde yoksa, model dosyanıza da 'followers' eklemelisiniz.
-      return notif.followers.contains(userId);
-    }).toList();
+    return notifications.where((n) => n.followers.contains(userId)).toList();
   }
 
-  // Belirli bir bildirimin durumunu (status) güncellemek için
-Future<void> updateNotificationStatus(String notificationId, String newStatus) async {
-  try {
-    await _firestore
-        .collection('notifications')
-        .doc(notificationId)
-        .update({'status': newStatus});
-
-    // Yerel listedeki durumu da anında güncelle ki arayüz yenilensin
-    final index = notifications.indexWhere((n) => n.notifId == notificationId);
-    if (index != -1) {
-      notifications[index].status = newStatus;
-      notifyListeners();
+  Future<void> updateNotificationStatus(String notificationId, String newStatus) async {
+    try {
+      await _firestore.collection('notifications').doc(notificationId).update({'status': newStatus});
+      // ✅ snapshots zaten güncelleyecek
+    } catch (e) {
+      debugPrint("Durum güncelleme hatası: $e");
     }
-  } catch (e) {
-    debugPrint("Durum güncelleme hatası: $e");
   }
-}
 
-// Açıklama Güncelleme
-Future<void> updateNotificationDescription(String id, String newDesc) async {
-  await _firestore.collection('notifications').doc(id).update({'description': newDesc});
-  await fetchNotifications();
-}
+  Future<void> updateNotificationDescription(String id, String newDesc) async {
+    await _firestore.collection('notifications').doc(id).update({'description': newDesc});
+    // ✅ snapshots zaten güncelleyecek
+  }
 
-// Bildirimi Silme
-Future<void> deleteNotification(String id) async {
-  await _firestore.collection('notifications').doc(id).delete();
-  await fetchNotifications();
-}
+  Future<void> deleteNotification(String id) async {
+    await _firestore.collection('notifications').doc(id).delete();
+    // ✅ snapshots zaten güncelleyecek
+  }
 
-List<NotificationModel> getAdminFilteredNotifications(String adminUnit) {
-  return notifications.where((n) => n.type == adminUnit.toLowerCase()).toList();
-}
+  List<NotificationModel> getAdminFilteredNotifications(String adminUnit) {
+    return notifications.where((n) => n.type == adminUnit.toLowerCase()).toList();
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
 }

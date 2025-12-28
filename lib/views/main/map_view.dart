@@ -20,47 +20,44 @@ class _MapViewState extends State<MapView> {
   static const LatLng campusLocation = LatLng(39.9009, 41.2640);
 
   bool onlyFollowing = false;
-  final Set<String> selectedStatuses = {}; // {"acik","inceleniyor","cozuldu"}
-  final Set<String> selectedTypes = {};    // {"saglik","kayip","guvenlik","duyuru","cevre","teknikariza","diger"}
+  final Set<String> selectedStatuses = {};
+  final Set<String> selectedTypes = {};
 
   NotificationModel? _selected;
 
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(() => context.read<NotificationViewModel>().fetchNotifications());
-  }
-
-  // ✅ TEK NORMALİZASYON (HomePage ile aynı)
+  /// ✅ HomePage ile aynı normalizasyon
   String _norm(String s) {
-    final lower = s.toLowerCase().trim();
-    return lower
+    return s
+        .toLowerCase()
+        .trim()
         .replaceAll(' ', '')
         .replaceAll('_', '')
-        .replaceAll('ı', 'i')
-        .replaceAll('ğ', 'g')
-        .replaceAll('ş', 's')
-        .replaceAll('ö', 'o')
-        .replaceAll('ü', 'u')
-        .replaceAll('ç', 'c');
+        .replaceAll("ı", "i")
+        .replaceAll("ğ", "g")
+        .replaceAll("ü", "u")
+        .replaceAll("ş", "s")
+        .replaceAll("ö", "o")
+        .replaceAll("ç", "c");
   }
 
   double _hueForType(String typeRaw) {
-    switch (_norm(typeRaw)) {
+    final type = _norm(typeRaw);
+
+    switch (type) {
       case "kayip":
-        return BitmapDescriptor.hueOrange; // turuncu
+        return BitmapDescriptor.hueOrange;
       case "saglik":
-        return BitmapDescriptor.hueGreen; // yeşil
+        return BitmapDescriptor.hueGreen;
       case "teknikariza":
-        return BitmapDescriptor.hueViolet; // mor
+        return BitmapDescriptor.hueViolet;
       case "guvenlik":
-        return BitmapDescriptor.hueRed; // kırmızı
+        return BitmapDescriptor.hueRed; // ✅ kırmızı
       case "cevre":
-        return BitmapDescriptor.hueCyan; // turkuaz
+        return BitmapDescriptor.hueCyan;
       case "duyuru":
-        return BitmapDescriptor.hueBlue; // mavi
+        return BitmapDescriptor.hueBlue;
       case "diger":
-        return BitmapDescriptor.hueRose; // pembe
+        return BitmapDescriptor.hueRose;
       case "acil":
         return BitmapDescriptor.hueRed;
       default:
@@ -73,26 +70,25 @@ class _MapViewState extends State<MapView> {
     required String? myUid,
   }) {
     return all.where((n) {
-      // only following
+      // location boşsa basma
+      // (modelde null değil ama garanti olsun)
+      final loc = n.location;
+      if (loc.latitude == 0.0 && loc.longitude == 0.0) return false;
+
       if (onlyFollowing) {
         if (myUid == null) return false;
         if (!n.followers.contains(myUid)) return false;
       }
 
-      // status filter
       if (selectedStatuses.isNotEmpty) {
         final st = _norm(n.status);
         if (!selectedStatuses.contains(st)) return false;
       }
 
-      // type filter
       if (selectedTypes.isNotEmpty) {
         final tp = _norm(n.type);
         if (!selectedTypes.contains(tp)) return false;
       }
-
-      // haritada acil göstermek istemiyorsan kapat
-      // if (_norm(n.type) == "acil") return false;
 
       return true;
     }).toList();
@@ -115,7 +111,6 @@ class _MapViewState extends State<MapView> {
   void _openFilterSheet() {
     showModalBottomSheet(
       context: context,
-      isScrollControlled: false,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -152,14 +147,10 @@ class _MapViewState extends State<MapView> {
 
                   const Text("Özel Filtre"),
                   const SizedBox(height: 8),
-                  chip(
-                    "Sadece Takip Ettiklerim",
-                    onlyFollowing,
-                        () {
-                      setModal(() => onlyFollowing = !onlyFollowing);
-                      setState(() {});
-                    },
-                  ),
+                  chip("Sadece Takip Ettiklerim", onlyFollowing, () {
+                    setModal(() => onlyFollowing = !onlyFollowing);
+                    setState(() {});
+                  }),
 
                   const SizedBox(height: 16),
                   const Text("Durum"),
@@ -179,6 +170,7 @@ class _MapViewState extends State<MapView> {
                   Wrap(
                     spacing: 8,
                     children: [
+                      chip("Acil", selectedTypes.contains("acil"), () => toggleSet(selectedTypes, "acil")),
                       chip("Sağlık", selectedTypes.contains("saglik"), () => toggleSet(selectedTypes, "saglik")),
                       chip("Kayıp", selectedTypes.contains("kayip"), () => toggleSet(selectedTypes, "kayip")),
                       chip("Güvenlik", selectedTypes.contains("guvenlik"), () => toggleSet(selectedTypes, "guvenlik")),

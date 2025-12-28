@@ -17,11 +17,13 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   String searchQuery = "";
-  String? selectedStatus;
-  String? selectedType; // ✅ normalize edilmiş değer: "saglik", "teknikariza", ...
+  String? selectedStatus; // ✅ normalize edilmiş: "acik" / "inceleniyor" / "cozuldu"
+  String? selectedType;   // ✅ normalize edilmiş: "kayip" / "teknikariza" / ...
   bool showOnlyFollowed = false;
 
-  bool _emergencySnackShown = false; // ✅ Task-1: sadece 1 kere göstersin
+  bool _emergencySnackShown = false; // ✅ acil uyarı 1 kere
+  final Map<String, String> _followedLastStatus = {}; // ✅ takip edilenlerde status değişimini yakalamak için
+  final Set<String> _shownStatusChangeKeys = {}; // ✅ aynı değişimi tekrar snack yapmasın
 
   String capitalize(String name) {
     if (name.isEmpty) return name;
@@ -31,10 +33,12 @@ class _HomePageState extends State<HomePage> {
     }).join(' ');
   }
 
-  /// ✅ TEK NORMALİZASYON (Home + Map + Filtre aynı)
-  /// "Teknik Arıza" / "teknik_ariza" / "teknikAriza" => "teknikariza"
-  /// "Sağlık" => "saglik"
-  String _normType(String t) {
+  /// ✅ TEK NORMALİZASYON (Home + Map aynı mantık)
+  /// - boşluk/underscore siler
+  /// - Türkçe karakterleri düzleştirir
+  /// Örn: "Teknik Arıza" / "teknik_ariza" / "teknikAriza" => "teknikariza"
+  ///      "Kayıp" => "kayip"
+  String _norm(String t) {
     final lower = t.toLowerCase().trim();
     return lower
         .replaceAll(' ', '')
@@ -47,26 +51,74 @@ class _HomePageState extends State<HomePage> {
         .replaceAll('ç', 'c');
   }
 
-  String _normStatus(String s) {
-    final lower = s.toLowerCase().trim();
-    return lower
-        .replaceAll('ı', 'i')
-        .replaceAll('ğ', 'g')
-        .replaceAll('ş', 's')
-        .replaceAll('ö', 'o')
-        .replaceAll('ü', 'u')
-        .replaceAll('ç', 'c');
+  String _normStatus(String s) => _norm(s);
+
+  void _showSnack(String text, {Color? color}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(text),
+        backgroundColor: color ?? Colors.black87,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  /// ✅ Görev: Takip edilen bildirimin durumu değişince uyarı göster
+  void _checkFollowedStatusChanges({
+    required List<NotificationModel> all,
+    required String? myUid,
+  }) {
+    if (myUid == null) return;
+
+    final followed = all.where((n) => n.followers.contains(myUid) && n.notifId != null).toList();
+
+    for (final n in followed) {
+      final id = n.notifId!;
+      final newSt = _normStatus(n.status);
+      final oldSt = _followedLastStatus[id];
+
+      // ilk kez görüyorsak map'e yaz
+      if (oldSt == null) {
+        _followedLastStatus[id] = newSt;
+        continue;
+      }
+
+      // status değiştiyse snack
+      if (oldSt != newSt) {
+        final key = "$id:$oldSt->$newSt";
+        if (_shownStatusChangeKeys.contains(key)) {
+          _followedLastStatus[id] = newSt;
+          continue;
+        }
+
+        _shownStatusChangeKeys.add(key);
+        _followedLastStatus[id] = newSt;
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showSnack(
+            "🔔 Takip ettiğin bildirim güncellendi: \"${n.title}\" → Durum: ${n.status}",
+            color: Colors.deepPurple,
+          );
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final notifVM = Provider.of<NotificationViewModel>(context);
-    final authVM = Provider.of<AuthViewModel>(context);
+    final notifVM = context.watch<NotificationViewModel>();
+    final authVM = context.watch<AuthViewModel>();
     final user = authVM.currentUser;
     final userName = capitalize(user?.name ?? "Kullanıcı");
+    final myUid = user?.uid;
+
+    // ✅ takip edilenlerde status değişimi kontrolü (real-time liste güncellenince otomatik çalışır)
+    _checkFollowedStatusChanges(all: notifVM.notifications, myUid: myUid);
 
     final filteredNotifications = notifVM.notifications.where((n) {
-      final nType = _normType(n.type);
+      final nType = _norm(n.type);
 
       // 1) Kullanıcı tercihleri
       if (user != null) {
@@ -98,25 +150,14 @@ class _HomePageState extends State<HomePage> {
     }).toList();
 
     // ✅ ACİL duyurular ayrı
-    final emergencyNotifs =
-    filteredNotifications.where((n) => _normType(n.type) == "acil").toList();
+    final emergencyNotifs = filteredNotifications.where((n) => _norm(n.type) == "acil").toList();
+    final normalNotifs = filteredNotifications.where((n) => _norm(n.type) != "acil").toList();
 
-    final normalNotifs =
-    filteredNotifications.where((n) => _normType(n.type) != "acil").toList();
-
-    // ✅ Task-1: Kullanıcı giriş yaptıktan sonra acil duyuru varsa 1 kere uyar
+    // ✅ Görev-1: kullanıcı giriş yaptıktan sonra acil duyuru varsa 1 kere uyar
     if (emergencyNotifs.isNotEmpty && !_emergencySnackShown) {
       _emergencySnackShown = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text("⚠️ ACİL duyurunuz var! Lütfen kontrol edin."),
-            backgroundColor: Colors.red.shade700,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        _showSnack("⚠️ ACİL duyurunuz var! Lütfen kontrol edin.", color: Colors.red.shade700);
       });
     }
 
@@ -206,16 +247,9 @@ class _HomePageState extends State<HomePage> {
                           (notif) => GestureDetector(
                         onTap: () => Navigator.push(
                           context,
-                          MaterialPageRoute(
-                            builder: (_) => NotificationDetailPage(notification: notif),
-                          ),
+                          MaterialPageRoute(builder: (_) => NotificationDetailPage(notification: notif)),
                         ),
-                        child: _buildNotificationCard(
-                          context,
-                          notif,
-                          user?.uid,
-                          forceEmergencyStyle: true,
-                        ),
+                        child: _buildNotificationCard(context, notif, myUid, forceEmergencyStyle: true),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -226,11 +260,9 @@ class _HomePageState extends State<HomePage> {
                         (notif) => GestureDetector(
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => NotificationDetailPage(notification: notif),
-                        ),
+                        MaterialPageRoute(builder: (_) => NotificationDetailPage(notification: notif)),
                       ),
-                      child: _buildNotificationCard(context, notif, user?.uid),
+                      child: _buildNotificationCard(context, notif, myUid),
                     ),
                   ),
                 ],
@@ -356,7 +388,7 @@ class _HomePageState extends State<HomePage> {
     final notifVM = Provider.of<NotificationViewModel>(context, listen: false);
     final isFollowing = userId != null && notif.followers.contains(userId);
 
-    final isEmergency = forceEmergencyStyle || _normType(notif.type) == "acil";
+    final isEmergency = forceEmergencyStyle || _norm(notif.type) == "acil";
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -410,7 +442,7 @@ class _HomePageState extends State<HomePage> {
                   color: isFollowing ? Colors.deepPurple : Colors.grey,
                 ),
                 onPressed: () {
-                  if (userId != null) {
+                  if (userId != null && notif.notifId != null) {
                     notifVM.toggleFollowNotification(notif.notifId!, userId);
                   }
                 },
