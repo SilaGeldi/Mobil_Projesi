@@ -17,74 +17,62 @@ class MapView extends StatefulWidget {
 class _MapViewState extends State<MapView> {
   final Completer<GoogleMapController> _controller = Completer();
 
-  // ✅ Kampüs konumu (Erzurum / Atatürk Üni )
   static const LatLng campusLocation = LatLng(39.9009, 41.2640);
 
-  // ✅ Filtre state
   bool onlyFollowing = false;
-  final Set<String> selectedStatuses = {}; // ör: {"aktif","inceleniyor","cozuldu"}
-  final Set<String> selectedTypes = {};    // ör: {"saglik","kayip","guvenlik","duyuru","cevre","teknik_ariza","diger"}
+  final Set<String> selectedStatuses = {}; // {"acik","inceleniyor","cozuldu"}
+  final Set<String> selectedTypes = {};    // {"saglik","kayip","guvenlik","duyuru","cevre","teknikariza","diger"}
 
   NotificationModel? _selected;
 
   @override
   void initState() {
     super.initState();
-    // Harita ekranına girince bildirimleri çek (VM’in zaten çekiyorsa sorun değil)
     Future.microtask(() => context.read<NotificationViewModel>().fetchNotifications());
   }
 
-  // --- Normalizasyon: Türkçe / büyük-küçük / boşluk vs. farklarını toparlar
+  // ✅ TEK NORMALİZASYON (HomePage ile aynı)
   String _norm(String s) {
-    return s
-        .toLowerCase()
-        .trim()
-        .replaceAll("ı", "i")
-        .replaceAll("ğ", "g")
-        .replaceAll("ü", "u")
-        .replaceAll("ş", "s")
-        .replaceAll("ö", "o")
-        .replaceAll("ç", "c")
-        .replaceAll(" ", "_");
+    final lower = s.toLowerCase().trim();
+    return lower
+        .replaceAll(' ', '')
+        .replaceAll('_', '')
+        .replaceAll('ı', 'i')
+        .replaceAll('ğ', 'g')
+        .replaceAll('ş', 's')
+        .replaceAll('ö', 'o')
+        .replaceAll('ü', 'u')
+        .replaceAll('ç', 'c');
   }
 
   double _hueForType(String typeRaw) {
-    final type = typeRaw.toLowerCase().trim();
-
-    switch (type) {
+    switch (_norm(typeRaw)) {
       case "kayip":
-        return BitmapDescriptor.hueOrange;   // turuncu
+        return BitmapDescriptor.hueOrange; // turuncu
       case "saglik":
-        return BitmapDescriptor.hueGreen;    // yeşil
-      case "teknik ariza":
+        return BitmapDescriptor.hueGreen; // yeşil
       case "teknikariza":
-      case "teknik_ariza":
-        return BitmapDescriptor.hueViolet;   // mor
+        return BitmapDescriptor.hueViolet; // mor
       case "guvenlik":
-        return BitmapDescriptor.hueYellow;      // kırmızı
+        return BitmapDescriptor.hueRed; // kırmızı
       case "cevre":
-        return BitmapDescriptor.hueCyan;     // turkuaz
+        return BitmapDescriptor.hueCyan; // turkuaz
       case "duyuru":
-        return BitmapDescriptor.hueBlue;     // mavi
+        return BitmapDescriptor.hueBlue; // mavi
       case "diger":
-        return BitmapDescriptor.hueRose;     // pembe
+        return BitmapDescriptor.hueRose; // pembe
       case "acil":
-        return BitmapDescriptor.hueRed; // burada önemsiz; zaten filtreyle göstermiyoruz
+        return BitmapDescriptor.hueRed;
       default:
-        return BitmapDescriptor.hueAzure;    // bilinmeyenler
+        return BitmapDescriptor.hueAzure;
     }
   }
 
-
-  // ✅ Filtre uygula
   List<NotificationModel> _applyFilters({
     required List<NotificationModel> all,
     required String? myUid,
   }) {
     return all.where((n) {
-      // location null/boş ise haritaya basma
-      if (n.location == null) return false;
-
       // only following
       if (onlyFollowing) {
         if (myUid == null) return false;
@@ -102,6 +90,9 @@ class _MapViewState extends State<MapView> {
         final tp = _norm(n.type);
         if (!selectedTypes.contains(tp)) return false;
       }
+
+      // haritada acil göstermek istemiyorsan kapat
+      // if (_norm(n.type) == "acil") return false;
 
       return true;
     }).toList();
@@ -147,7 +138,7 @@ class _MapViewState extends State<MapView> {
                   set.add(key);
                 }
               });
-              setState(() {}); // haritayı güncelle
+              setState(() {});
             }
 
             return Padding(
@@ -193,7 +184,7 @@ class _MapViewState extends State<MapView> {
                       chip("Güvenlik", selectedTypes.contains("guvenlik"), () => toggleSet(selectedTypes, "guvenlik")),
                       chip("Duyuru", selectedTypes.contains("duyuru"), () => toggleSet(selectedTypes, "duyuru")),
                       chip("Çevre", selectedTypes.contains("cevre"), () => toggleSet(selectedTypes, "cevre")),
-                      chip("Teknik Arıza", selectedTypes.contains("teknik_ariza"), () => toggleSet(selectedTypes, "teknik_ariza")),
+                      chip("Teknik Arıza", selectedTypes.contains("teknikariza"), () => toggleSet(selectedTypes, "teknikariza")),
                       chip("Diğer", selectedTypes.contains("diger"), () => toggleSet(selectedTypes, "diger")),
                     ],
                   ),
@@ -245,7 +236,7 @@ class _MapViewState extends State<MapView> {
         children: [
           GoogleMap(
             initialCameraPosition: const CameraPosition(
-              target: campusLocation, // ✅ Ankara değil, kampüs
+              target: campusLocation,
               zoom: 14.5,
             ),
             markers: markers,
@@ -253,13 +244,11 @@ class _MapViewState extends State<MapView> {
             myLocationButtonEnabled: true,
             onMapCreated: (c) async {
               _controller.complete(c);
-              // ✅ ilk açılışta kampüse kesin git
               await c.moveCamera(CameraUpdate.newLatLngZoom(campusLocation, 14.5));
             },
             onTap: (_) => setState(() => _selected = null),
           ),
 
-          // Pin bilgi kartı
           if (_selected != null)
             Align(
               alignment: Alignment.bottomCenter,
